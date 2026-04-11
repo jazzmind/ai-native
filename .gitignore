@@ -1,0 +1,34 @@
+# Dependencies
+app/node_modules/
+
+# Build output
+app/.next/
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm
+
+# Electron build output
+app/dist/
+
+# Environment files
+.env
+.env.local
+app/.env.local
+
+# Deploy state (contains agent IDs, not secrets)
+# Include this if you want to track deployed agents
+# .deploy-state.json
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

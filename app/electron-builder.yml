@@ -1,0 +1,23 @@
+appId: com.coachplatform.app
+productName: Coach Platform
+directories:
+  buildResources: build
+  output: dist
+files:
+  - electron/**/*
+  - .next/**/*
+  - package.json
+  - node_modules/**/*
+mac:
+  category: public.app-category.business
+  target:
+    - dmg
+    - zip
+win:
+  target:
+    - nsis
+    - portable
+linux:
+  target:
+    - AppImage
+    - deb
