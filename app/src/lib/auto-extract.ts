@@ -86,12 +86,79 @@ export async function extractFromConversation(
   return result;
 }
 
+export async function extractFromThread(
+  messages: { role: string; content: string; coach_key: string | null }[],
+  userId: string,
+  projectId: string,
+  conversationId: string
+): Promise<ExtractionResult> {
+  const result: ExtractionResult = { facts: [], knowledge: [] };
+
+  const userMessages: string[] = [];
+  const advisorResponses: Map<string, string[]> = new Map();
+
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      userMessages.push(msg.content);
+    } else if (msg.role === "assistant" && msg.content) {
+      const key = msg.coach_key || "advisor";
+      if (!advisorResponses.has(key)) advisorResponses.set(key, []);
+      advisorResponses.get(key)!.push(msg.content);
+    }
+  }
+
+  const parts: string[] = [];
+  for (const userMsg of userMessages) {
+    parts.push(`User: ${userMsg}`);
+  }
+  for (const [key, responses] of advisorResponses.entries()) {
+    parts.push(`[${key}]: ${responses.join("\n\n")}`);
+  }
+
+  const fullContext = parts.join("\n\n---\n\n").slice(0, 8000);
+
+  const [facts, knowledge] = await Promise.all([
+    extractProfileFacts(fullContext),
+    extractKnowledgeItems(fullContext),
+  ]);
+
+  const profileProvider = getProfileProvider();
+  for (const fact of facts) {
+    try {
+      await profileProvider.upsert(userId, fact.category, fact.key, fact.value, conversationId);
+    } catch {
+      // skip individual upsert failures
+    }
+  }
+  result.facts = facts;
+
+  const knowledgeProvider = getKnowledgeProvider();
+  for (const item of knowledge) {
+    try {
+      await knowledgeProvider.ingest(
+        { userId, projectId },
+        {
+          content: item.content,
+          title: item.title,
+          source: `conversation:${conversationId}`,
+          metadata: { tags: item.tags, auto_extracted: true },
+        }
+      );
+    } catch {
+      // skip individual ingest failures
+    }
+  }
+  result.knowledge = knowledge;
+
+  return result;
+}
+
 async function extractProfileFacts(context: string): Promise<ExtractedFact[]> {
   const client = getClient();
 
   try {
     const response = await client.messages.create({
-      model: "claude-haiku-4-20250414",
+      model: "claude-haiku-4-5",
       max_tokens: 1024,
       system: `You extract user profile facts from business conversations. Only extract when there is clear, explicit signal — never guess or infer weakly.
 
@@ -123,7 +190,8 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     return parsed.filter(
       (f: any) => f.category && f.key && f.value
     ) as ExtractedFact[];
-  } catch {
+  } catch (err) {
+    console.error("[auto-extract] extractProfileFacts failed:", err);
     return [];
   }
 }
@@ -135,7 +203,7 @@ async function extractKnowledgeItems(
 
   try {
     const response = await client.messages.create({
-      model: "claude-haiku-4-20250414",
+      model: "claude-haiku-4-5",
       max_tokens: 2048,
       system: `You extract reusable knowledge items from business advisory conversations. Only extract when the advisors provide concrete, referenceable information worth remembering.
 
@@ -176,7 +244,8 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     return parsed.filter(
       (k: any) => k.title && k.content
     ) as ExtractedKnowledge[];
-  } catch {
+  } catch (err) {
+    console.error("[auto-extract] extractKnowledgeItems failed:", err);
     return [];
   }
 }

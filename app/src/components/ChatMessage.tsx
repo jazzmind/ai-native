@@ -8,6 +8,7 @@ import { UserPlus } from "lucide-react";
 import { CoachIcon } from "./CoachIcon";
 import { ActivityLog } from "./ActivityLog";
 import { FeedbackButtons } from "./FeedbackButtons";
+import { CopyButtons } from "./CopyButtons";
 import { RequestReviewDialog } from "./RequestReviewDialog";
 import type { CoachIconName } from "@/lib/coaches";
 import type { ActivityItem } from "./Chat";
@@ -196,6 +197,7 @@ export function ChatMessage({
               conversationId={conversationId}
               coachKey={coachKey}
               mode={mode}
+              content={content}
             />
           )}
         </div>
@@ -204,23 +206,27 @@ export function ChatMessage({
   );
 }
 
-function MessageActions({ messageId, conversationId, coachKey, mode }: {
+function MessageActions({ messageId, conversationId, coachKey, mode, content }: {
   messageId: number;
   conversationId: string;
   coachKey?: string | null;
   mode?: string | null;
+  content: string;
 }) {
   const [showReviewDialog, setShowReviewDialog] = useState(false);
 
   return (
     <>
       <div className="mt-2 pt-1.5 border-t border-[var(--border)] opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between">
-        <FeedbackButtons
-          messageId={messageId}
-          conversationId={conversationId}
-          coachKey={coachKey}
-          mode={mode}
-        />
+        <div className="flex items-center gap-1">
+          <FeedbackButtons
+            messageId={messageId}
+            conversationId={conversationId}
+            coachKey={coachKey}
+            mode={mode}
+          />
+          <CopyButtons content={content} />
+        </div>
         <button
           onClick={() => setShowReviewDialog(true)}
           className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-purple-400 transition-colors"

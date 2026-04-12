@@ -8,6 +8,7 @@ import { UserPlus } from "lucide-react";
 import { CoachIcon } from "./CoachIcon";
 import { ActivityLog } from "./ActivityLog";
 import { FeedbackButtons } from "./FeedbackButtons";
+import { CopyButtons } from "./CopyButtons";
 import { RequestReviewDialog } from "./RequestReviewDialog";
 import type { CoachIconName } from "@/lib/coaches";
 import type { ActivityItem } from "./Chat";
@@ -183,12 +184,15 @@ export function TabbedAdvisorResponse({
           {!displayStreaming && displayContent && displayMessageId && conversationId && (
             <>
               <div className="mt-2 pt-1.5 border-t border-[var(--border)] opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between">
-                <FeedbackButtons
-                  messageId={displayMessageId}
-                  conversationId={conversationId}
-                  coachKey={displayCoachKey}
-                  mode={mode}
-                />
+                <div className="flex items-center gap-1">
+                  <FeedbackButtons
+                    messageId={displayMessageId}
+                    conversationId={conversationId}
+                    coachKey={displayCoachKey}
+                    mode={mode}
+                  />
+                  <CopyButtons content={displayContent} />
+                </div>
                 <button
                   onClick={() => setShowReviewDialog(true)}
                   className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-purple-400 transition-colors"
