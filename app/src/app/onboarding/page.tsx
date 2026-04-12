@@ -182,10 +182,10 @@ export default function OnboardingPage() {
             <div className="text-center py-12">
               <Rocket size={48} className="mx-auto mb-6 text-[var(--accent)]" />
               <h1 className="text-3xl font-bold text-[var(--text)] mb-3">
-                Welcome to Coach Platform
+                Welcome to AI Executive Team
               </h1>
               <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto mb-8 leading-relaxed">
-                Your AI-powered executive team. Get coaching on strategy, technology,
+                Your AI-powered advisory team. Get expert guidance on strategy, technology,
                 funding, finance, legal, and growth -- all powered by intelligent agents.
               </p>
 
@@ -222,7 +222,7 @@ export default function OnboardingPage() {
                 Choose Deployment Target
               </h2>
               <p className="text-sm text-[var(--text-muted)] mb-6">
-                Where should your coach agents run?
+                Where should your advisors run?
               </p>
               <div className="space-y-3">
                 {TARGET_TYPES.map(({ type, label, description, Icon }) => (
@@ -368,7 +368,7 @@ export default function OnboardingPage() {
                 Configure Integrations
               </h2>
               <p className="text-sm text-[var(--text-muted)] mb-6">
-                Connect external services to give your coaches access to your tools.
+                Connect external services to give your advisors access to your tools.
                 These are optional and can be configured later from Admin.
               </p>
 
@@ -480,7 +480,7 @@ export default function OnboardingPage() {
                 Deploy Your Coaches
               </h2>
               <p className="text-sm text-[var(--text-muted)] mb-6">
-                This will deploy 8 agents (7 coaches + QA Judge) to your{" "}
+                This will deploy 8 agents (7 advisors + QA Judge) to your{" "}
                 {targetType === "cma" ? "Claude Managed Agents" : "Busibox"} instance.
               </p>
 
@@ -545,7 +545,7 @@ export default function OnboardingPage() {
                 You're All Set
               </h2>
               <p className="text-sm text-[var(--text-muted)] mb-8 max-w-md mx-auto">
-                Your coach agents have been deployed and are ready to help. Start
+                Your advisors have been deployed and are ready to help. Start
                 a conversation and ask anything about your business.
               </p>
               <button

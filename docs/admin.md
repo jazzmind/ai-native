@@ -8,7 +8,7 @@ nav_order: 5
 
 ## Overview
 
-The admin console (`/admin`) provides a UI for managing deployment targets, deploying coach agents, and connecting MCP servers. It replaces manual env file editing and CLI script execution.
+The admin console (`/admin`) provides a UI for managing deployment targets, deploying advisors, and connecting MCP servers. Configuration is per-user -- each authenticated user manages their own deployment targets and API keys.
 
 ## Setup Wizard
 
@@ -28,7 +28,7 @@ Credentials are tested against the target API:
 - Busibox: hits the `/api/health` endpoint
 
 ### Step 4: Deploy
-All 8 agents (7 coaches + QA Judge) are deployed to the target. The wizard shows progress and reports success/failure.
+All 8 agents (7 advisors + QA Judge) are deployed to the target. The wizard shows progress and reports success/failure.
 
 ## Target Detail Page
 
@@ -64,9 +64,9 @@ The admin console stores configuration in SQLite with encrypted credentials:
 
 ### Tables
 
-**config** -- key-value settings store
+**config** -- key-value settings store (per-user)
 
-**deploy_targets** -- deployment target configurations
+**deploy_targets** -- deployment target configurations (per-user)
 - Credentials encrypted at rest using AES-256-GCM
 - Key derived from `CONFIG_ENCRYPTION_KEY` env var or a machine-specific fallback
 - Agent state (IDs, versions) stored alongside for update/redeploy
@@ -96,5 +96,5 @@ Ports the logic from `deploy.py` to TypeScript:
 ### Busibox Adapter
 Pushes INSTRUCTIONS.md content to the Busibox Agent API:
 1. Validates connection via `/api/health`
-2. POSTs each coach to `/api/agents`
+2. POSTs each advisor to `/api/agents`
 3. Checks status via GET `/api/agents`

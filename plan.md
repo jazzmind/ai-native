@@ -29,3 +29,11 @@ We need to research all the different ways we can do this. Ideally, I would like
 Once we build these, we are going to deploy them using whatever option is easiest, then we're going to try to create an AI-Native business with them.
 
 The business is around providing an LLM/FinOps control as a service. If you're running LiteLLM or Bifrost or any other LLM proxy layer you can hook in this agent which will monitor spend and make recommendations and/or implement controls in real time to achieve governance, budget and security objectives.
+
+
+Sundai Club Project Pitches
+
+Executive Team on CMA 
+Interested in building on Claude Managed Agents? I've created an MVP of an agentic executive team that runs on CMA. Use it to test your ideas out today, help make it better by incorporating cool MCP servers, skills, etc. It can use notion, slack, google workspace already... 
+
+Agentic Cost Control

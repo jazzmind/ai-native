@@ -4,9 +4,9 @@ title: Home
 nav_order: 1
 ---
 
-# AI-Native Coach Platform
+# AI Executive Team
 
-An AI-powered executive coaching team providing specialized business guidance across seven domains with multi-agent orchestration and a deployment admin console.
+An AI-native advisory team framework with seven specialized advisors, five operational modes (advise, coach, plan, assist, execute), human/expert-in-the-loop controls, behavioral adaptation, and multi-agent orchestration.
 
 ## Getting Started
 
@@ -16,26 +16,35 @@ An AI-powered executive coaching team providing specialized business guidance ac
 
 ## Core Features
 
-### Multi-Agent Chat
-Route questions to specialized coaches automatically. The router uses keyword matching and LLM classification to pick the right expert. When a question spans domains, multiple coaches respond and their answers are synthesized.
+### Multi-Agent Advisory Team
+Route questions to specialized advisors automatically. The router uses LLM classification to pick 1-4 advisors, selects a lead, and synthesizes their perspectives. Users can also explicitly select advisors or use `@mentions`.
 
-### Admin Console
-A setup wizard for deploying coaches to different targets. Currently supports Claude Managed Agents and Busibox. Manages API keys, MCP server authentication, and agent health monitoring.
+### Agent Modes
+Five operational modes control how advisors respond: **Advise** (recommend), **Coach** (Socratic), **Plan** (action items), **Assist** (draft artifacts), **Execute** (take actions). Modes can be set explicitly or auto-detected from message intent.
+
+### Behavioral Adaptation
+Thumbs up/down feedback drives an AI-analyzed, human-approved learning loop. When negative feedback accumulates, the system proposes behavioral directives that are injected at runtime without redeploying agents.
+
+### Human in the Loop
+Execute mode uses configurable tool trust levels (auto/confirm/blocked) with session-level batch approval. External experts can review conversations and post inline comments that are incorporated into agent context.
+
+### Multi-User & Projects
+OAuth/SSO authentication via Auth.js v5. Project-scoped workspaces with per-user deployment targets, knowledge bases, and behavioral directives.
 
 ### Knowledge Base
-When connected to Busibox, coaches can query organizational documents, contracts, and strategy materials. Falls back to local SQLite FTS5 search when Busibox is not available.
+Adapter-based knowledge system supporting standalone SQLite FTS5 or Busibox RAG. Per-project scoping with a common knowledge pool and explicit sharing.
 
 ### Desktop App
-The platform wraps in Electron for a native desktop experience. Runs the Next.js server locally and opens a browser window to it.
+The platform wraps in Electron for a native desktop experience.
 
 ## Documentation
 
 | Guide | Description |
 |-------|-------------|
 | [Architecture](architecture.md) | System design, data flow, and component overview |
-| [Coaches](coaches.md) | Each coach's expertise and how the QA Judge works |
+| [Advisors](coaches.md) | Each advisor's expertise, modes, and the QA Judge |
 | [Admin Console](admin.md) | Deployment targets, setup wizard, MCP authentication |
 | [Deployment](deployment.md) | How to deploy agents to CMA or Busibox |
-| [Knowledge Base](knowledge.md) | Knowledge provider interface and Busibox integration |
+| [Knowledge Base](knowledge.md) | Knowledge provider interface and project scoping |
 | [API Reference](api.md) | All REST API endpoints |
 | [Development](development.md) | Local setup, testing, contributing |

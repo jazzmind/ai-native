@@ -70,7 +70,7 @@ export default function SetupWizard() {
     <div className="h-full overflow-y-auto">
     <div className="max-w-2xl mx-auto p-8">
       <h1 className="text-2xl font-bold text-[var(--text)] mb-2">Setup Wizard</h1>
-      <p className="text-sm text-[var(--text-muted)] mb-8">Configure a new deployment target for your coach agents.</p>
+      <p className="text-sm text-[var(--text-muted)] mb-8">Configure a new deployment target for your advisors.</p>
 
       {/* Step indicators */}
       <div className="flex items-center gap-2 mb-8 text-xs">
@@ -160,12 +160,12 @@ export default function SetupWizard() {
             <CheckCircle size={24} className="text-emerald-400" />
             <div>
               <div className="text-sm font-bold text-[var(--text)]">Credentials validated</div>
-              <div className="text-xs text-[var(--text-muted)]">Ready to deploy all coach agents.</div>
+              <div className="text-xs text-[var(--text-muted)]">Ready to deploy all advisors.</div>
             </div>
           </div>
 
           <p className="text-sm text-[var(--text-muted)] mb-6">
-            This will deploy 8 agents (7 coaches + QA Judge) to your {targetType === "cma" ? "Claude Managed Agents" : "Busibox"} instance.
+            This will deploy 8 agents (7 advisors + QA Judge) to your {targetType === "cma" ? "Claude Managed Agents" : "Busibox"} instance.
             Existing agents will be updated; new agents will be created.
           </p>
 
@@ -193,7 +193,7 @@ export default function SetupWizard() {
         <div className="bg-[var(--bg-secondary)] border border-emerald-500/30 rounded-xl p-6 text-center">
           <CheckCircle size={40} className="mx-auto mb-4 text-emerald-400" />
           <h2 className="text-lg font-bold text-[var(--text)] mb-2">Deployment Complete</h2>
-          <p className="text-sm text-[var(--text-muted)] mb-6">Your coach agents have been deployed.</p>
+          <p className="text-sm text-[var(--text-muted)] mb-6">Your advisors have been deployed.</p>
           <div className="flex gap-2 justify-center">
             <button onClick={() => router.push("/admin")}
               className="px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] text-[var(--text-muted)]">

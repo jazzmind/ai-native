@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deploy business coach agents to Claude Managed Agents.
+Deploy AI Executive Team advisors to Claude Managed Agents.
 
 Usage:
     python coaches/deploy.py deploy          # Create/update all agents + environment
@@ -68,7 +68,7 @@ COACH_CONFIGS = [
         "skills": [],
     },
     {
-        "name": "Technology Coach",
+        "name": "Technology Advisor",
         "dir": "technology",
         "model": "claude-sonnet-4-6",
         "description": "Senior technology advisor for architecture, AI/ML systems, developer experience, security, and cost engineering.",
@@ -77,7 +77,7 @@ COACH_CONFIGS = [
         "skills": [],
     },
     {
-        "name": "Founder Coach",
+        "name": "Founder Advisor",
         "dir": "founder",
         "model": "claude-sonnet-4-6",
         "description": "Advisor for founder personal goals, vision alignment, and executive focus.",
@@ -86,7 +86,7 @@ COACH_CONFIGS = [
         "skills": [],
     },
     {
-        "name": "Strategy Coach",
+        "name": "Strategy Advisor",
         "dir": "strategy",
         "model": "claude-sonnet-4-6",
         "description": "Business strategy advisor for market positioning, competitive analysis, KPIs/OKRs, and strategic planning.",
@@ -95,7 +95,7 @@ COACH_CONFIGS = [
         "skills": [],
     },
     {
-        "name": "Funding Coach",
+        "name": "Funding Advisor",
         "dir": "funding",
         "model": "claude-sonnet-4-6",
         "description": "Capital strategy advisor covering VC, angel, bootstrapping, debt, grants, and cap table management.",
@@ -104,7 +104,7 @@ COACH_CONFIGS = [
         "skills": [{"type": "anthropic", "skill_id": "xlsx"}],
     },
     {
-        "name": "Finance Coach",
+        "name": "Finance Advisor",
         "dir": "finance",
         "model": "claude-sonnet-4-6",
         "description": "Financial operations advisor for accounting systems, tax compliance, FP&A, risk management, and regulatory compliance.",
@@ -113,7 +113,7 @@ COACH_CONFIGS = [
         "skills": [{"type": "anthropic", "skill_id": "xlsx"}],
     },
     {
-        "name": "Legal Coach",
+        "name": "Legal Advisor",
         "dir": "legal",
         "model": "claude-sonnet-4-6",
         "description": "Legal strategy advisor for corporate structure, contracts, IP, employment law, and regulatory compliance.",
@@ -122,7 +122,7 @@ COACH_CONFIGS = [
         "skills": [],
     },
     {
-        "name": "Growth Coach",
+        "name": "Growth Advisor",
         "dir": "growth",
         "model": "claude-sonnet-4-6",
         "description": "Growth strategy advisor for GTM, sales, marketing, PLG, metrics, and customer retention.",
@@ -267,7 +267,7 @@ def create_agent(
 
 
 def deploy(client: anthropic.Anthropic):
-    print("\n=== Deploying Coach Agents ===\n")
+    print("\n=== Deploying Advisors ===\n")
     state = load_state()
 
     print("[1/3] Environment")
@@ -337,7 +337,7 @@ def test_session(client: anthropic.Anthropic):
 
     tech_coach = state["agents"].get("technology")
     if not tech_coach:
-        print("Error: Technology Coach not deployed. Run 'deploy' first.")
+        print("Error: Technology Advisor not deployed. Run 'deploy' first.")
         return
 
     env_id = state.get("environment_id")
@@ -345,7 +345,7 @@ def test_session(client: anthropic.Anthropic):
         print("Error: No environment. Run 'deploy' first.")
         return
 
-    print("\n=== Test Session: Technology Coach ===\n")
+    print("\n=== Test Session: Technology Advisor ===\n")
 
     print("Creating session...")
     session = client.beta.sessions.create(
@@ -421,7 +421,7 @@ def cleanup(client: anthropic.Anthropic):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Deploy coach agents to Claude Managed Agents")
+    parser = argparse.ArgumentParser(description="Deploy AI Executive Team advisors to Claude Managed Agents")
     parser.add_argument("command", choices=["deploy", "list", "test", "cleanup"])
     parser.add_argument("--api-key", help="Anthropic API key (or set ANTHROPIC_API_KEY)")
     args = parser.parse_args()

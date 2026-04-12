@@ -32,10 +32,10 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
             <LogIn size={24} className="text-[var(--accent)]" />
-            <h1 className="text-2xl font-bold">Coach Platform</h1>
+            <h1 className="text-2xl font-bold">AI Executive Team</h1>
           </div>
           <p className="text-sm text-[var(--text-muted)]">
-            Sign in to access your AI business coaches
+            Sign in to access your AI advisory team
           </p>
         </div>
 

@@ -66,7 +66,7 @@ export default function AdminDashboard() {
           <Rocket size={40} className="mx-auto mb-4 text-[var(--text-muted)] opacity-30" />
           <h2 className="text-lg font-semibold text-[var(--text)] mb-2">No deployment targets configured</h2>
           <p className="text-sm text-[var(--text-muted)] mb-4 max-w-md mx-auto">
-            Add a deployment target to deploy your coach agents to Claude Managed Agents or Busibox.
+            Add a deployment target to deploy your advisors to Claude Managed Agents or Busibox.
           </p>
           <Link href="/admin/setup"
             className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-white rounded-lg text-sm font-semibold">

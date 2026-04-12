@@ -25,6 +25,10 @@ npm install
 # Set up environment
 cp ../.env.example ../.env
 # Edit .env with your ANTHROPIC_API_KEY
+
+# Set up auth
+cp .env.local.example .env.local
+# Edit .env.local with AUTH_SECRET and AUTH_ADMIN_EMAILS
 ```
 
 ## Development Server
@@ -94,23 +98,33 @@ Per project rules:
 - Tailwind CSS for all styling (no inline styles)
 - React Server Components where possible, `"use client"` only when needed
 - `@/` path alias for `src/`
+- Lucide icons for all iconography (no emoji)
+- shadcn/ui components where appropriate
 
 ## Key Conventions
 
-### Adding a New Coach
+### Adding a New Advisor
 
-1. Create `coaches/new-coach/INSTRUCTIONS.md`
+1. Create `coaches/new-advisor/INSTRUCTIONS.md`
 2. Add entry to `COACH_CONFIGS` in `deploy.py`
 3. Add entry to `COACH_META` in `app/src/lib/coaches.ts`
 4. Add entry to `COACH_CONFIGS` in `app/src/lib/deploy/coach-loader.ts`
 5. Run `python deploy.py deploy` to deploy
+
+### Adding a New Mode
+
+1. Create `coaches/modes/new-mode.md` with the mode template
+2. Add the mode to `AGENT_MODES` and `MODE_META` in `app/src/lib/modes.ts`
+3. Update the ModeSelector component to include the new mode's icon and description
+4. Update the router's mode auto-detection heuristics in `app/src/lib/router.ts`
 
 ### Adding a New API Route
 
 1. Create directory under `src/app/api/`
 2. Export `GET`, `POST`, etc. from `route.ts`
 3. Use `NextRequest` for typed request handling
-4. Return `Response.json()` for JSON responses
+4. Use `getRequiredUser()` from `lib/auth.ts` for authentication
+5. Return `Response.json()` for JSON responses
 
 ### Adding a Deploy Adapter
 
@@ -119,16 +133,48 @@ Per project rules:
 3. Add the type to the setup wizard UI
 4. Add to the target type labels in the admin dashboard
 
+### Adding a Data Provider (Knowledge / Profile / Activity)
+
+1. Implement the provider interface from the corresponding `lib/<type>/` directory
+2. Register in the provider factory
+3. The provider will be auto-selected based on deployment target configuration
+
 ## Database
 
 SQLite via `better-sqlite3` in WAL mode. The database file `coach-router.db` is created in the app's working directory on first access.
 
 Tables are auto-created by each module's `getDb()` function. No migration system -- schema changes are additive via `CREATE TABLE IF NOT EXISTS`.
 
+### Key Tables
+
+| Table | Purpose |
+|-------|---------|
+| `conversations` | Chat threads (per-user, per-project) |
+| `messages` | Chat messages with `mode` column |
+| `message_feedback` | Thumbs up/down ratings with comments |
+| `agent_behaviors` | Behavioral directives (per-advisor, per-project) |
+| `behavior_revisions` | AI-proposed behavioral changes |
+| `tool_trust` | Tool trust levels (per-user, per-project) |
+| `review_requests` | Expert review tracking |
+| `expert_comments` | Inline expert feedback |
+| `projects` | User workspaces |
+| `user_profile` | User profile facts (global per-user) |
+| `knowledge_fts` | FTS5 knowledge index (per-project) |
+| `deploy_targets` | Deployment configuration (per-user) |
+| `config` | Key-value settings (per-user) |
+| `mcp_connections` | MCP server auth state |
+
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes | API key for Claude |
+| `AUTH_SECRET` | Yes | Auth.js session encryption key |
+| `AUTH_TRUST_HOST` | Yes | Set to `true` for local development |
+| `AUTH_ADMIN_EMAILS` | No | Comma-separated list of allowed email addresses |
+| `AUTH_GOOGLE_ID` | No | Google OAuth client ID |
+| `AUTH_GOOGLE_SECRET` | No | Google OAuth client secret |
+| `AUTH_GITHUB_ID` | No | GitHub OAuth client ID |
+| `AUTH_GITHUB_SECRET` | No | GitHub OAuth client secret |
 | `COACH_MCP_ENABLED` | No | Enable MCP servers in deploy.py (`true`/`false`) |
 | `CONFIG_ENCRYPTION_KEY` | No | Override key for credential encryption |

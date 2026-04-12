@@ -509,7 +509,7 @@ export default function KnowledgePage() {
           <>
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm text-[var(--text-muted)]">
-                Facts and preferences your coaches use to personalize their advice.
+                Facts and preferences your advisors use to personalize their advice.
                 These are shared across all projects.
               </p>
               <button
