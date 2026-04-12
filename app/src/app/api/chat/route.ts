@@ -66,13 +66,13 @@ export async function POST(req: NextRequest) {
     requestedMode && isValidMode(requestedMode) ? requestedMode : undefined;
 
   let convId = conversationId;
-  if (!convId || !getConversation(convId, user.id)) {
+  if (!convId || !(await getConversation(convId, user.id))) {
     convId = uuidv4();
     const title = message.slice(0, 80) + (message.length > 80 ? "..." : "");
-    createConversation(convId, title, user.id, projectId);
+    await createConversation(convId, title, user.id, projectId);
   }
 
-  addMessage(convId, "user", message, null, explicitMode || null);
+  await addMessage(convId, "user", message, null, explicitMode || null);
 
   let coaches: CoachConfig[];
   let synthesize = false;
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   }
 
   const modeTemplate = loadModeTemplate(activeMode);
-  const expertComments = getExpertComments(convId);
+  const expertComments = await getExpertComments(convId);
 
   const encoder = new TextEncoder();
 
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
 
       const coachPromises = coaches.map(async (coach) => {
         // Load per-coach behavioral directives
-        const behaviors = getActiveBehaviors(user.id, projectId, coach.key);
+        const behaviors = await getActiveBehaviors(user.id, projectId, coach.key);
         const behaviorContext = formatBehaviorDirectives(behaviors);
 
         const fullContext = [...contextParts];
@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (fullResponse) {
-          addMessage(convId!, "assistant", fullResponse, coach.key, activeMode);
+          await addMessage(convId!, "assistant", fullResponse, coach.key, activeMode);
           coachResponses.set(coach.key, fullResponse);
         }
 
@@ -305,7 +305,7 @@ export async function POST(req: NextRequest) {
           }
 
           if (synthesisText) {
-            addMessage(convId!, "assistant", synthesisText, "synthesis", activeMode);
+            await addMessage(convId!, "assistant", synthesisText, "synthesis", activeMode);
             finalSynthesisText = synthesisText;
           }
         } catch (err) {

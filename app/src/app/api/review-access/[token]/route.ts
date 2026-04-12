@@ -10,14 +10,14 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  const review = getReviewByToken(token);
+  const review = await getReviewByToken(token);
 
   if (!review) {
     return Response.json({ error: "Invalid or expired review link" }, { status: 404 });
   }
 
-  const messages = getMessages(review.conversation_id);
-  const comments = getExpertCommentsByReview(review.id);
+  const messages = await getMessages(review.conversation_id);
+  const comments = await getExpertCommentsByReview(review.id);
 
   return Response.json({
     review: {

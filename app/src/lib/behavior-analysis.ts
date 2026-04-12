@@ -49,19 +49,16 @@ async function analyzeCoachFeedback(
 ): Promise<AnalysisResult> {
   const noProposal: AnalysisResult = { shouldPropose: false, coachKey };
 
-  // Check if there's already a pending revision for this coach+project
-  const pendingRevisions = listRevisions(userId, projectId, "proposed");
+  const pendingRevisions = await listRevisions(userId, projectId, "proposed");
   if (pendingRevisions.some((r) => r.coach_key === coachKey)) {
     return noProposal;
   }
 
-  // Threshold 1: 3+ thumbs-down in last 7 days
-  const recentDown = getRecentNegativeFeedback(userId, coachKey, projectId, 20);
+  const recentDown = await getRecentNegativeFeedback(userId, coachKey, projectId, 20);
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const recentSevenDays = recentDown.filter((f) => f.created_at >= sevenDaysAgo);
 
-  // Threshold 2: >30% negative rate over last 20 messages
-  const stats = getFeedbackStats(userId, projectId, coachKey);
+  const stats = await getFeedbackStats(userId, projectId, coachKey);
   const negativeRate = stats.total > 0 ? stats.down / stats.total : 0;
 
   const threshold1 = recentSevenDays.length >= 3;
@@ -71,14 +68,12 @@ async function analyzeCoachFeedback(
     return noProposal;
   }
 
-  // Gather context for AI analysis
   const negativeFeedback = recentDown.slice(0, 10);
   const feedbackIds = negativeFeedback.map((f) => f.id);
 
-  // Get the messages that received negative feedback
   const messageContexts: string[] = [];
   for (const fb of negativeFeedback) {
-    const messages = getMessages(fb.conversation_id);
+    const messages = await getMessages(fb.conversation_id);
     const targetMsg = messages.find((m) => m.id === fb.message_id);
     const prevUserMsg = messages
       .filter((m) => m.role === "user" && m.id < fb.message_id)
@@ -98,8 +93,7 @@ async function analyzeCoachFeedback(
     return noProposal;
   }
 
-  // Get current behavioral directives for context
-  const currentBehaviors = getActiveBehaviors(userId, projectId, coachKey);
+  const currentBehaviors = await getActiveBehaviors(userId, projectId, coachKey);
   const behaviorText = currentBehaviors.length > 0
     ? currentBehaviors.map((b) => `- ${b.directive}`).join("\n")
     : "None currently set.";
@@ -138,7 +132,7 @@ Analyze the pattern and propose a behavioral directive.`,
     const parsed = JSON.parse(text);
 
     if (parsed.analysis && parsed.directive) {
-      const revision = createRevision(
+      await createRevision(
         coachKey,
         projectId,
         userId,

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "projectId is required" }, { status: 400 });
   }
 
-  const trustSettings = listToolTrust(user.id, projectId);
+  const trustSettings = await listToolTrust(user.id, projectId);
   return Response.json({ tools: trustSettings });
 }
 
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       if (!["auto", "confirm", "blocked"].includes(trustLevel)) {
         return Response.json({ error: "trustLevel must be auto, confirm, or blocked" }, { status: 400 });
       }
-      setToolTrust(user.id, projectId, toolPattern, trustLevel);
+      await setToolTrust(user.id, projectId, toolPattern, trustLevel);
       return Response.json({ ok: true });
     }
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       if (!id) {
         return Response.json({ error: "id is required" }, { status: 400 });
       }
-      deleteToolTrust(id, user.id);
+      await deleteToolTrust(id, user.id);
       return Response.json({ ok: true });
     }
 

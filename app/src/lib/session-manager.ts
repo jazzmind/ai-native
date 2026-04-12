@@ -14,20 +14,21 @@ function getClient(): Anthropic {
 
 export async function getOrCreateSession(
   conversationId: string,
-  coach: CoachConfig
+  coach: CoachConfig,
+  apiKey?: string
 ): Promise<string> {
-  const existing = getCoachSession(conversationId, coach.key);
+  const existing = await getCoachSession(conversationId, coach.key);
   if (existing) {
     return existing;
   }
 
-  const client = getClient();
+  const client = apiKey ? new Anthropic({ apiKey }) : getClient();
   const session = await client.beta.sessions.create({
     agent: coach.agentId,
     environment_id: getEnvironmentId(),
   });
 
-  setCoachSession(conversationId, coach.key, session.id);
+  await setCoachSession(conversationId, coach.key, session.id);
   return session.id;
 }
 

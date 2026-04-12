@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const user = await getRequiredUser();
     const projectId = req.nextUrl.searchParams.get("projectId");
     if (!projectId) return Response.json({ error: "projectId required" }, { status: 400 });
-    const shares = listKnowledgeShares(projectId);
+    const shares = await listKnowledgeShares(projectId);
     return Response.json({ shares });
   } catch (err) {
     return handleAuthError(err);
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "delete") {
       if (!body.id) return Response.json({ error: "id required" }, { status: 400 });
-      deleteKnowledgeShare(body.id, user.id);
+      await deleteKnowledgeShare(body.id, user.id);
       return Response.json({ ok: true });
     }
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "sourceProjectId and targetProjectId required" }, { status: 400 });
     }
 
-    const share = createKnowledgeShare(body.sourceProjectId, body.targetProjectId, user.id, body.collectionId);
+    const share = await createKnowledgeShare(body.sourceProjectId, body.targetProjectId, user.id, body.collectionId);
     return Response.json({ ok: true, share });
   } catch (err) {
     return handleAuthError(err);

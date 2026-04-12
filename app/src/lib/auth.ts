@@ -35,12 +35,10 @@ if (process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID && process.env.OIDC_CL
   });
 }
 
-// Allowed emails from env (comma-separated). If set, only these can sign in.
 const allowedEmails = process.env.AUTH_ADMIN_EMAILS
   ? process.env.AUTH_ADMIN_EMAILS.split(",").map(e => e.trim().toLowerCase())
   : null;
 
-// Credentials provider for local/email-based auth
 providers.push(
   Credentials({
     name: "Email",
@@ -72,20 +70,60 @@ export const authConfig: NextAuthConfig = {
     signIn: "/login",
   },
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.userId = user.id;
       }
+
+      // On sign-in, ensure the user has an org
+      if (trigger === "signIn" && token.userId) {
+        try {
+          const { getUserOrganization, createOrganization } = await import("./db");
+          const userId = token.userId as string;
+          let org = await getUserOrganization(userId);
+
+          if (!org) {
+            const name = token.name
+              ? `${token.name}'s Team`
+              : "My Team";
+            const email = (token.email || userId).toLowerCase();
+            const slugBase = email.split("@")[0].replace(/[^a-z0-9]/g, "-");
+            const slug = `${slugBase}-${Date.now().toString(36)}`;
+            org = await createOrganization(name, slug, userId, "free");
+          }
+
+          token.orgId = org.id;
+          token.orgPlan = org.plan;
+        } catch {
+          // DB not available (local dev without DATABASE_URL) - continue without org
+        }
+      }
+
+      // Refresh org info periodically (on session updates)
+      if (trigger === "update" && token.userId) {
+        try {
+          const { getUserOrganization } = await import("./db");
+          const org = await getUserOrganization(token.userId as string);
+          if (org) {
+            token.orgId = org.id;
+            token.orgPlan = org.plan;
+          }
+        } catch {
+          // DB not available
+        }
+      }
+
       return token;
     },
     session({ session, token }) {
       if (session.user && token.userId) {
         (session.user as any).id = token.userId as string;
+        (session.user as any).orgId = token.orgId as string | undefined;
+        (session.user as any).orgPlan = token.orgPlan as string | undefined;
       }
       return session;
     },
     signIn({ user }) {
-      // If allowed emails are configured, enforce for all providers
       if (allowedEmails && user.email) {
         return allowedEmails.includes(user.email.toLowerCase().trim());
       }
@@ -94,12 +132,15 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth: session, request }) {
       const { pathname } = request.nextUrl;
 
+      if (pathname === "/") return true;
       if (pathname.startsWith("/api/auth")) return true;
       if (pathname.startsWith("/login")) return true;
+      if (pathname.startsWith("/api/billing/webhook")) return true;
+      if (pathname.startsWith("/api/marketplace/expert-count")) return true;
+      if (pathname.startsWith("/expert/apply")) return true;
 
       if (session?.user) return true;
 
-      // Not logged in — redirect to login
       return Response.redirect(new URL("/login", request.nextUrl.origin));
     },
   },
@@ -117,6 +158,44 @@ export async function getRequiredUser(): Promise<{ id: string; email: string; na
     email: session.user.email || "",
     name: session.user.name || "",
   };
+}
+
+export async function getRequiredUserAndOrg(): Promise<{
+  user: { id: string; email: string; name: string };
+  org: { id: string; plan: 'free' | 'pro' | 'team' };
+}> {
+  const session = await auth();
+  if (!session?.user) {
+    throw new AuthError("Not authenticated");
+  }
+
+  const user = {
+    id: (session.user as any).id || session.user.email || "unknown",
+    email: session.user.email || "",
+    name: session.user.name || "",
+  };
+
+  const orgId = (session.user as any).orgId;
+  const orgPlan = (session.user as any).orgPlan || 'free';
+
+  if (!orgId) {
+    // Fallback: look up org from DB
+    const { getUserOrganization, createOrganization } = await import("./db");
+    let org = await getUserOrganization(user.id);
+    if (!org) {
+      const name = user.name ? `${user.name}'s Team` : "My Team";
+      const slug = `${user.email.split("@")[0].replace(/[^a-z0-9]/g, "-")}-${Date.now().toString(36)}`;
+      org = await createOrganization(name, slug, user.id, "free");
+    }
+    return { user, org: { id: org.id, plan: org.plan as 'free' | 'pro' | 'team' } };
+  }
+
+  return { user, org: { id: orgId, plan: orgPlan as 'free' | 'pro' | 'team' } };
+}
+
+export function isAdmin(email: string): boolean {
+  if (!allowedEmails) return false;
+  return allowedEmails.includes(email.toLowerCase().trim());
 }
 
 export class AuthError extends Error {

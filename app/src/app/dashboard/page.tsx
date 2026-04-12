@@ -14,7 +14,7 @@ interface Conversation {
   updated_at: string;
 }
 
-export default function Home() {
+export default function DashboardPage() {
   const router = useRouter();
   const { status } = useSession();
   const { activeProject, loading: projectLoading } = useProject();

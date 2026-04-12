@@ -22,15 +22,15 @@ export async function GET(req: NextRequest) {
   const reviewId = searchParams.get("id");
 
   if (reviewId) {
-    const review = getReviewRequest(reviewId);
+    const review = await getReviewRequest(reviewId);
     if (!review || review.requester_user_id !== user.id) {
       return Response.json({ error: "Review not found" }, { status: 404 });
     }
-    const comments = getExpertCommentsByReview(reviewId);
+    const comments = await getExpertCommentsByReview(reviewId);
     return Response.json({ review, comments });
   }
 
-  const reviews = listReviewsForUser(user.id);
+  const reviews = await listReviewsForUser(user.id);
   return Response.json({ reviews });
 }
 
@@ -55,8 +55,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Auto-generate context summary from recent messages
-      const messages = getMessages(conversationId);
+      const messages = await getMessages(conversationId);
       const recentMessages = messages.slice(-10);
       const contextSummary = recentMessages
         .map((m) => `${m.role}: ${m.content.slice(0, 150)}`)
@@ -65,7 +64,7 @@ export async function POST(req: NextRequest) {
       const accessToken = generateAccessToken();
       const expiresAt = getExpirationDate(expirationDays || 7);
 
-      const review = createReviewRequest(
+      const review = await createReviewRequest(
         conversationId,
         user.id,
         expertEmail,
@@ -76,8 +75,6 @@ export async function POST(req: NextRequest) {
         messageId
       );
 
-      // TODO: Send email notification here when SMTP is configured
-      // For now, return the access URL for manual sharing
       const reviewUrl = `/review/${accessToken}`;
 
       return Response.json({ review, reviewUrl });
@@ -88,11 +85,11 @@ export async function POST(req: NextRequest) {
       if (!id || !status) {
         return Response.json({ error: "id and status are required" }, { status: 400 });
       }
-      const review = getReviewRequest(id);
+      const review = await getReviewRequest(id);
       if (!review || review.requester_user_id !== user.id) {
         return Response.json({ error: "Review not found" }, { status: 404 });
       }
-      updateReviewStatus(id, status);
+      await updateReviewStatus(id, status);
       return Response.json({ ok: true });
     }
 

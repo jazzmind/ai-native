@@ -19,13 +19,12 @@ export async function GET(req: NextRequest) {
   const projectId = searchParams.get("projectId");
   const days = parseInt(searchParams.get("days") || "30");
 
-  const byCoach = getFeedbackByCoach(user.id, projectId || undefined);
-  const timeline = getFeedbackTimeline(user.id, projectId || undefined, days);
-  const modeUsage = getModeUsageDistribution(user.id, projectId || undefined);
+  const byCoach = await getFeedbackByCoach(user.id, projectId || undefined);
+  const timeline = await getFeedbackTimeline(user.id, projectId || undefined, days);
+  const modeUsage = await getModeUsageDistribution(user.id, projectId || undefined);
 
-  // Get behavioral adaptation history
   const allRevisions = projectId
-    ? listRevisions(user.id, projectId)
+    ? await listRevisions(user.id, projectId)
     : [];
 
   return Response.json({

@@ -10,21 +10,21 @@ export async function GET(req: NextRequest) {
     const projectId = req.nextUrl.searchParams.get("projectId");
 
     if (id) {
-      const conversation = getConversation(id, user.id);
+      const conversation = await getConversation(id, user.id);
       if (!conversation) {
         return Response.json({ error: "Not found" }, { status: 404 });
       }
-      const messages = getMessages(id);
+      const messages = await getMessages(id);
       const activityProvider = getActivityProvider();
       const activity = await activityProvider.listByConversation(user.id, id);
-      const expertComments = getExpertComments(id);
+      const expertComments = await getExpertComments(id);
       return Response.json({ conversation, messages, activity, expertComments });
     }
 
     if (!projectId) {
       return Response.json({ error: "projectId required" }, { status: 400 });
     }
-    const conversations = listConversations(user.id, projectId);
+    const conversations = await listConversations(user.id, projectId);
     return Response.json({ conversations });
   } catch (err) {
     return handleAuthError(err);

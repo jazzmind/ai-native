@@ -201,12 +201,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "conversationId and format are required" }, { status: 400 });
   }
 
-  const conversation = getConversation(conversationId, user.id);
+  const conversation = await getConversation(conversationId, user.id);
   if (!conversation) {
     return Response.json({ error: "Conversation not found" }, { status: 404 });
   }
 
-  const messages = getMessages(conversationId);
+  const messages = await getMessages(conversationId);
   const title = conversation.title || "Conversation";
   const safeTitle = title.replace(/[^a-zA-Z0-9-_ ]/g, "").slice(0, 60);
 

@@ -23,12 +23,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const conversation = getConversation(conversationId, user.id);
+  const conversation = await getConversation(conversationId, user.id);
   if (!conversation) {
     return Response.json({ error: "Conversation not found" }, { status: 404 });
   }
 
-  const messages = getMessages(conversationId);
+  const messages = await getMessages(conversationId);
   if (messages.length === 0) {
     return Response.json({ facts: [], knowledge: [] });
   }

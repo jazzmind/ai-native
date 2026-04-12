@@ -11,12 +11,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const review = getReviewRequest(id);
+  const review = await getReviewRequest(id);
   if (!review) {
     return Response.json({ error: "Review not found" }, { status: 404 });
   }
 
-  const comments = getExpertCommentsByReview(id);
+  const comments = await getExpertCommentsByReview(id);
   return Response.json({ comments });
 }
 
@@ -25,7 +25,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const review = getReviewRequest(id);
+  const review = await getReviewRequest(id);
   if (!review) {
     return Response.json({ error: "Review not found" }, { status: 404 });
   }
@@ -41,12 +41,11 @@ export async function POST(
     return Response.json({ error: "content and authorEmail are required" }, { status: 400 });
   }
 
-  // Mark review as in_review if it was pending
   if (review.status === "pending") {
-    updateReviewStatus(id, "in_review");
+    await updateReviewStatus(id, "in_review");
   }
 
-  const comment = addExpertComment(
+  const comment = await addExpertComment(
     id,
     review.conversation_id,
     authorEmail,

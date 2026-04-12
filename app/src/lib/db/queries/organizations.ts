@@ -1,0 +1,159 @@
+import { eq, and } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
+import { getDb } from '../client';
+import { organizations, orgMemberships } from '../schema';
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  plan: 'free' | 'pro' | 'team';
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
+  subscriptionStatus: string | null;
+  monthlyMessageCount: number;
+  monthlyMessageResetAt: Date | null;
+  expertReviewCredits: number;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export async function createOrganization(
+  name: string,
+  slug: string,
+  ownerUserId: string,
+  plan: 'free' | 'pro' | 'team' = 'free'
+): Promise<Organization> {
+  const db = getDb();
+  const orgId = uuidv4();
+  const membershipId = uuidv4();
+
+  await db.insert(organizations).values({
+    id: orgId,
+    name,
+    slug,
+    plan,
+  });
+
+  await db.insert(orgMemberships).values({
+    id: membershipId,
+    orgId,
+    userId: ownerUserId,
+    role: 'owner',
+  });
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+  return org as Organization;
+}
+
+export async function getOrganization(id: string): Promise<Organization | undefined> {
+  const db = getDb();
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+  return org as Organization | undefined;
+}
+
+export async function getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+  const db = getDb();
+  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  return org as Organization | undefined;
+}
+
+export async function getUserOrganization(userId: string): Promise<Organization | undefined> {
+  const db = getDb();
+  const [membership] = await db
+    .select()
+    .from(orgMemberships)
+    .where(eq(orgMemberships.userId, userId));
+
+  if (!membership) return undefined;
+
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, membership.orgId));
+
+  return org as Organization | undefined;
+}
+
+export async function getUserMembership(userId: string, orgId: string) {
+  const db = getDb();
+  const [membership] = await db
+    .select()
+    .from(orgMemberships)
+    .where(and(eq(orgMemberships.userId, userId), eq(orgMemberships.orgId, orgId)));
+  return membership;
+}
+
+export async function updateOrganization(
+  id: string,
+  updates: Partial<{
+    name: string;
+    plan: 'free' | 'pro' | 'team';
+    stripeCustomerId: string;
+    stripeSubscriptionId: string;
+    stripePriceId: string;
+    subscriptionStatus: string;
+    monthlyMessageCount: number;
+    monthlyMessageResetAt: Date;
+    expertReviewCredits: number;
+  }>
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(organizations)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(eq(organizations.id, id));
+}
+
+export async function incrementMessageCount(orgId: string): Promise<void> {
+  const db = getDb();
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+  if (!org) return;
+
+  const now = new Date();
+  const resetAt = org.monthlyMessageResetAt;
+
+  if (!resetAt || now > resetAt) {
+    const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    await db
+      .update(organizations)
+      .set({
+        monthlyMessageCount: 1,
+        monthlyMessageResetAt: nextReset,
+        updatedAt: now,
+      })
+      .where(eq(organizations.id, orgId));
+  } else {
+    await db
+      .update(organizations)
+      .set({
+        monthlyMessageCount: org.monthlyMessageCount + 1,
+        updatedAt: now,
+      })
+      .where(eq(organizations.id, orgId));
+  }
+}
+
+export async function getMessageCount(orgId: string): Promise<number> {
+  const db = getDb();
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+  if (!org) return 0;
+
+  const now = new Date();
+  if (org.monthlyMessageResetAt && now > org.monthlyMessageResetAt) {
+    return 0;
+  }
+  return org.monthlyMessageCount;
+}
+
+export async function listOrganizationMembers(orgId: string) {
+  const db = getDb();
+  return db.select().from(orgMemberships).where(eq(orgMemberships.orgId, orgId));
+}
+
+export async function addOrgMember(orgId: string, userId: string, role: 'owner' | 'admin' | 'member' = 'member') {
+  const db = getDb();
+  const id = uuidv4();
+  await db.insert(orgMemberships).values({ id, orgId, userId, role });
+}

@@ -1,3 +1,6 @@
+I want to turn this into a commercial service. I want to deploy on vercel. Users can sign up, we need stripe to handle payments/subscriptions. 
+
+
 
 
 

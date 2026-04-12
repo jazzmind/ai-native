@@ -549,7 +549,7 @@ export default function OnboardingPage() {
                 a conversation and ask anything about your business.
               </p>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/dashboard")}
                 className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 Start Chatting

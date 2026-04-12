@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const mode = searchParams.get("mode");
   const days = searchParams.get("days");
 
-  const stats = getFeedbackStats(
+  const stats = await getFeedbackStats(
     user.id,
     projectId || undefined,
     coachKey || undefined,
@@ -57,12 +57,12 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "rating must be 'up' or 'down'" }, { status: 400 });
   }
 
-  const existing = getFeedbackForMessage(messageId);
+  const existing = await getFeedbackForMessage(messageId);
   if (existing) {
     return Response.json({ error: "Feedback already exists for this message" }, { status: 409 });
   }
 
-  const feedback = addFeedback(
+  const feedback = await addFeedback(
     messageId,
     conversationId,
     user.id,

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
   const coachKey = searchParams.get("coachKey");
-  const type = searchParams.get("type"); // "behaviors" | "revisions"
+  const type = searchParams.get("type");
 
   if (!projectId) {
     return Response.json({ error: "projectId is required" }, { status: 400 });
@@ -29,11 +29,11 @@ export async function GET(req: NextRequest) {
 
   if (type === "revisions") {
     const status = searchParams.get("status");
-    const revisions = listRevisions(user.id, projectId, status || undefined);
+    const revisions = await listRevisions(user.id, projectId, status || undefined);
     return Response.json({ revisions });
   }
 
-  const behaviors = listBehaviors(user.id, projectId, coachKey || undefined);
+  const behaviors = await listBehaviors(user.id, projectId, coachKey || undefined);
   return Response.json({ behaviors });
 }
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       if (!coachKey || !projectId || !directive) {
         return Response.json({ error: "coachKey, projectId, and directive are required" }, { status: 400 });
       }
-      const behavior = createBehavior(coachKey, projectId, user.id, directive, "manual");
+      const behavior = await createBehavior(coachKey, projectId, user.id, directive, "manual");
       return Response.json(behavior);
     }
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       if (!id) {
         return Response.json({ error: "id is required" }, { status: 400 });
       }
-      updateBehavior(id, user.id, {
+      await updateBehavior(id, user.id, {
         directive: directive !== undefined ? directive : undefined,
         is_active: is_active !== undefined ? is_active : undefined,
       });
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       if (!id) {
         return Response.json({ error: "id is required" }, { status: 400 });
       }
-      deleteBehavior(id, user.id);
+      await deleteBehavior(id, user.id);
       return Response.json({ ok: true });
     }
 
@@ -84,9 +84,9 @@ export async function POST(req: NextRequest) {
       if (!revisionId) {
         return Response.json({ error: "revisionId is required" }, { status: 400 });
       }
-      updateRevisionStatus(revisionId, user.id, "approved");
+      await updateRevisionStatus(revisionId, user.id, "approved");
       if (directive && revProjectId && revCoachKey) {
-        createBehaviorFromRevision(revCoachKey, revProjectId, user.id, directive, "ai-revision");
+        await createBehaviorFromRevision(revCoachKey, revProjectId, user.id, directive, "ai-revision");
       }
       return Response.json({ ok: true });
     }
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       if (!revisionId) {
         return Response.json({ error: "revisionId is required" }, { status: 400 });
       }
-      updateRevisionStatus(revisionId, user.id, "rejected");
+      await updateRevisionStatus(revisionId, user.id, "rejected");
       return Response.json({ ok: true });
     }
 
