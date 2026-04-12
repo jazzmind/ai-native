@@ -50,10 +50,6 @@ providers.push(
       if (!credentials?.email) return null;
       const email = String(credentials.email).toLowerCase().trim();
 
-      if (allowedEmails && !allowedEmails.includes(email)) {
-        return null;
-      }
-
       return {
         id: email,
         email,
@@ -123,10 +119,7 @@ export const authConfig: NextAuthConfig = {
       }
       return session;
     },
-    signIn({ user }) {
-      if (allowedEmails && user.email) {
-        return allowedEmails.includes(user.email.toLowerCase().trim());
-      }
+    signIn() {
       return true;
     },
     authorized({ auth: session, request }) {
@@ -135,6 +128,7 @@ export const authConfig: NextAuthConfig = {
       if (pathname === "/") return true;
       if (pathname.startsWith("/api/auth")) return true;
       if (pathname.startsWith("/login")) return true;
+      if (pathname.startsWith("/signup")) return true;
       if (pathname.startsWith("/api/billing/webhook")) return true;
       if (pathname.startsWith("/api/marketplace/expert-count")) return true;
       if (pathname.startsWith("/expert/apply")) return true;

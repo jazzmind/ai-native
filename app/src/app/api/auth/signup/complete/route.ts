@@ -1,0 +1,39 @@
+import { NextRequest } from 'next/server';
+import { validateVerificationToken } from '@/lib/verification-codes';
+
+export async function POST(req: NextRequest) {
+  try {
+    const { token, firstName, website, businessDescription, businessStage, apiKey } = await req.json();
+
+    if (!token) {
+      return Response.json({ error: 'Verification token is required' }, { status: 400 });
+    }
+
+    const verified = validateVerificationToken(token);
+    if (!verified) {
+      return Response.json({ error: 'Invalid or expired verification. Please start over.' }, { status: 400 });
+    }
+
+    if (!firstName?.trim()) {
+      return Response.json({ error: 'First name is required' }, { status: 400 });
+    }
+
+    // Store the profile data — this will be picked up by the JWT callback
+    // when signIn("credentials") is called from the client.
+    // We return the verified email so the client can use it with signIn.
+    return Response.json({
+      success: true,
+      email: verified.email,
+      profile: {
+        firstName: firstName.trim(),
+        website: website?.trim() || null,
+        businessDescription: businessDescription?.trim() || null,
+        businessStage: businessStage || null,
+        apiKey: apiKey?.trim() || null,
+      },
+    });
+  } catch (err) {
+    console.error('signup complete error:', err);
+    return Response.json({ error: 'Failed to complete signup' }, { status: 500 });
+  }
+}

@@ -16,7 +16,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
               Sign In
             </Link>
             <Link
-              href="/login"
+              href="/signup"
               className="text-sm font-medium bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
             >
               Get Started free

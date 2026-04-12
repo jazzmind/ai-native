@@ -11,7 +11,7 @@ import { useState, useRef, useEffect } from "react";
 import { useProject } from "./ProjectContext";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Team", Icon: MessageSquare },
+  { href: "/dashboard", label: "Team", Icon: MessageSquare },
   { href: "/knowledge", label: "Knowledge", Icon: BookOpen },
   { href: "/behaviors", label: "Behaviors", Icon: Brain },
   { href: "/effectiveness", label: "Effectiveness", Icon: BarChart3 },
@@ -25,6 +25,8 @@ export function AppNav() {
   const pathname = usePathname();
   const isOnboarding = pathname.startsWith("/onboarding");
   const isLogin = pathname.startsWith("/login");
+  const isSignup = pathname.startsWith("/signup");
+  const isMarketing = pathname === "/";
   const { data: session } = useSession();
   const { projects, activeProject, setActiveProjectId, createProject } = useProject();
   const [showProjectMenu, setShowProjectMenu] = useState(false);
@@ -48,7 +50,7 @@ export function AppNav() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  if (isLogin) return null;
+  if (isLogin || isSignup || isMarketing) return null;
 
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
@@ -65,7 +67,7 @@ export function AppNav() {
       {!isOnboarding && session && (
         <>
           {NAV_ITEMS.map(({ href, label, Icon }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const active = pathname.startsWith(href);
             return (
               <Link
                 key={href}

@@ -16,7 +16,7 @@ export default function HeroSection() {
         </p>
         <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link
-            href="/login"
+            href="/signup"
             className="w-full sm:w-auto px-8 py-3 text-base font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-center"
           >
             Start free — no credit card

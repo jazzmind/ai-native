@@ -17,13 +17,13 @@ export default function LoginPage() {
 
   const handleOAuth = async (providerId: string) => {
     setLoading(providerId);
-    await signIn(providerId, { callbackUrl: "/" });
+    await signIn(providerId, { callbackUrl: "/dashboard" });
   };
 
   const handleCredentials = async () => {
     if (!email.trim()) return;
     setLoading("credentials");
-    await signIn("credentials", { email, name, callbackUrl: "/" });
+    await signIn("credentials", { email, name, callbackUrl: "/dashboard" });
   };
 
   return (
@@ -93,6 +93,13 @@ export default function LoginPage() {
             )}
           </button>
         </div>
+
+        <p className="text-center text-xs text-[var(--text-muted)] mt-6">
+          Don't have an account?{" "}
+          <a href="/signup" className="text-[var(--accent)] hover:underline font-medium">
+            Sign up free
+          </a>
+        </p>
       </div>
     </div>
   );
