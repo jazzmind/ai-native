@@ -52,22 +52,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch("/api/projects");
       const data = await res.json();
-      setProjects(data.projects || []);
+      const projectList: Project[] = data.projects || [];
+      setProjects(projectList);
 
-      const projectList = data.projects || [];
-      if (projectList.length > 0 && !activeProjectId) {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        const match = stored && projectList.find((p: Project) => p.id === stored);
-        const defaultP = match || projectList.find((p: Project) => p.is_default) || projectList[0];
-        setActiveProjectIdState(defaultP.id);
-        localStorage.setItem(STORAGE_KEY, defaultP.id);
+      if (projectList.length > 0) {
+        setActiveProjectIdState((prev) => {
+          if (prev && projectList.find((p) => p.id === prev)) return prev;
+          const stored = localStorage.getItem(STORAGE_KEY);
+          const match = stored && projectList.find((p) => p.id === stored);
+          const defaultP = match || projectList.find((p) => p.is_default) || projectList[0];
+          localStorage.setItem(STORAGE_KEY, defaultP.id);
+          return defaultP.id;
+        });
       }
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, [status, activeProjectId]);
+  }, [status]);
 
   useEffect(() => {
     refreshProjects();

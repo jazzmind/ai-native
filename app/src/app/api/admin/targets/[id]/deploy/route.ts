@@ -3,6 +3,7 @@ import { getTarget, updateTargetStatus } from "@/lib/config-store";
 import { getAdapter } from "@/lib/deploy";
 import { loadCoachDefinitions } from "@/lib/deploy/coach-loader";
 import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { resetDeployState } from "@/lib/coaches-server";
 
 export async function POST(
   req: NextRequest,
@@ -51,9 +52,11 @@ export async function POST(
 
     if (result.success) {
       updateTargetStatus(id, "deployed", agentState);
+      resetDeployState();
       return Response.json({ ok: true, result });
     } else {
       updateTargetStatus(id, "error", agentState);
+      resetDeployState();
       return Response.json({ ok: false, error: result.error, result }, { status: 500 });
     }
   } catch (e: any) {

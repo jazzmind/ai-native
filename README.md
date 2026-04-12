@@ -103,19 +103,19 @@ Adapter-based knowledge system supporting standalone SQLite FTS5 or Busibox RAG.
 ### Installation
 
 ```bash
-cd coaches/app
+cd ai-native/app
 npm install
 ```
 
 ### Configuration
 
-Create a `.env` file in the `coaches/` directory:
+Create a `.env` file in the `ai-native/` directory:
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Create `coaches/app/.env.local` for auth:
+Create `ai-native/app/.env.local` for auth:
 
 ```env
 AUTH_SECRET=<random-32-char-string>
@@ -126,7 +126,7 @@ AUTH_ADMIN_EMAILS=you@example.com
 ### Deploy Agents (Claude Managed Agents)
 
 ```bash
-cd coaches
+cd ai-native
 python deploy.py deploy
 ```
 
@@ -135,7 +135,7 @@ This creates all 8 agents (7 advisors + QA Judge) and an environment on Claude's
 ### Run the App
 
 ```bash
-cd coaches/app
+cd ai-native/app
 npm run dev
 ```
 
@@ -144,7 +144,7 @@ Open [http://localhost:3000](http://localhost:3000). On first visit you'll go th
 ### Run as Desktop App (Electron)
 
 ```bash
-cd coaches/app
+cd ai-native/app
 npm run electron:dev
 ```
 
@@ -153,7 +153,7 @@ npm run electron:dev
 Full documentation is available at the [project documentation site](https://jazzmind.github.io/ai-native/).
 
 - [Architecture Guide](docs/architecture.md)
-- [Advisor Reference](docs/coaches.md)
+- [Advisor Reference](docs/ai-native.md)
 - [Admin Console](docs/admin.md)
 - [Deployment Guide](docs/deployment.md)
 - [Knowledge Base Integration](docs/knowledge.md)
@@ -163,7 +163,7 @@ Full documentation is available at the [project documentation site](https://jazz
 ## Project Structure
 
 ```
-coaches/
+ai-native/
 ├── app/                         # Next.js + Electron app
 │   ├── electron/                # Electron main process + preload
 │   ├── src/
@@ -208,7 +208,7 @@ coaches/
 ## Testing
 
 ```bash
-cd coaches/app
+cd ai-native/app
 npm test
 ```
 

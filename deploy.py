@@ -3,10 +3,10 @@
 Deploy AI Executive Team advisors to Claude Managed Agents.
 
 Usage:
-    python coaches/deploy.py deploy          # Create/update all agents + environment
-    python coaches/deploy.py list            # List existing agents
-    python coaches/deploy.py test            # Run a quick test session
-    python coaches/deploy.py cleanup         # Archive all agents and environment
+    python ai-native/deploy.py deploy          # Create/update all agents + environment
+    python ai-native/deploy.py list            # List existing agents
+    python ai-native/deploy.py test            # Run a quick test session
+    python ai-native/deploy.py cleanup         # Archive all agents and environment
 
 Requires:
     pip install anthropic
@@ -27,9 +27,9 @@ except ImportError:
     print("Error: anthropic package not installed. Run: pip install anthropic")
     sys.exit(1)
 
-COACHES_DIR = Path(__file__).parent
-STATE_FILE = COACHES_DIR / ".deploy-state.json"
-ENV_FILE = COACHES_DIR / ".env"
+ROOT_DIR = Path(__file__).parent
+STATE_FILE = ROOT_DIR / ".deploy-state.json"
+ENV_FILE = ROOT_DIR / ".env"
 
 
 def load_dotenv():
@@ -208,7 +208,7 @@ def create_agent(
     callable_agent_ids: list[dict] | None = None,
 ) -> tuple[str, int]:
     dir_key = config["dir"]
-    instructions_path = COACHES_DIR / config["dir"] / "INSTRUCTIONS.md"
+    instructions_path = ROOT_DIR / config["dir"] / "INSTRUCTIONS.md"
 
     if not instructions_path.exists():
         print(f"  SKIP {config['name']}: no INSTRUCTIONS.md at {instructions_path}")

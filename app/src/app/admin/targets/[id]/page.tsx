@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle, XCircle, Loader2, RefreshCw, Trash2, Link2, Unlink } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Loader2, RefreshCw, Trash2, Link2, Unlink, Key, Eye, EyeOff, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface Target {
@@ -43,6 +43,11 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
   const [checking, setChecking] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [editingKey, setEditingKey] = useState(false);
+  const [newApiKey, setNewApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [keySaveMsg, setKeySaveMsg] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/targets")
@@ -87,6 +92,33 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
       body: JSON.stringify({ action: "delete", id }),
     });
     router.push("/admin");
+  };
+
+  const handleUpdateApiKey = async () => {
+    if (!newApiKey.trim()) return;
+    setSavingKey(true);
+    setKeySaveMsg(null);
+    try {
+      const res = await fetch("/api/admin/targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_config", id, config: { apiKey: newApiKey.trim() } }),
+      });
+      if (res.ok) {
+        setKeySaveMsg("API key updated");
+        setEditingKey(false);
+        setNewApiKey("");
+        const targetsRes = await fetch("/api/admin/targets");
+        const targets = await targetsRes.json();
+        setTarget(targets.find((t: Target) => t.id === id) || null);
+      } else {
+        setKeySaveMsg("Failed to update");
+      }
+    } catch {
+      setKeySaveMsg("Failed to update");
+    }
+    setSavingKey(false);
+    setTimeout(() => setKeySaveMsg(null), 3000);
   };
 
   if (loading) {
@@ -152,6 +184,90 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
           <div className="text-sm font-bold text-[var(--text)]">
             {target.lastDeployedAt ? new Date(target.lastDeployedAt).toLocaleString() : "Never"}
           </div>
+        </div>
+      </div>
+
+      {/* Configuration */}
+      <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-5 mb-6">
+        <h2 className="text-sm font-bold text-[var(--text)] mb-4">Configuration</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] rounded-lg">
+            <div className="flex items-center gap-2">
+              <Key size={14} className="text-[var(--text-muted)]" />
+              <div>
+                <div className="text-sm font-semibold text-[var(--text)]">API Key</div>
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {target.type === "cma" ? "Anthropic API key" : "Busibox API key"}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingKey ? (
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <input
+                      type={showKey ? "text" : "password"}
+                      value={newApiKey}
+                      onChange={(e) => setNewApiKey(e.target.value)}
+                      placeholder="Enter new API key"
+                      className="w-64 bg-[var(--bg)] border border-[var(--border)] rounded px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-[var(--accent)] pr-8"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)]"
+                    >
+                      {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleUpdateApiKey}
+                    disabled={savingKey || !newApiKey.trim()}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded bg-[var(--accent)] text-white disabled:opacity-40"
+                  >
+                    {savingKey ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setEditingKey(false); setNewApiKey(""); }}
+                    className="px-2 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-[var(--text-muted)]">
+                    {target.config?.apiKey
+                      ? `${target.config.apiKey.slice(0, 12)}...${target.config.apiKey.slice(-4)}`
+                      : "Not set"}
+                  </span>
+                  <button
+                    onClick={() => setEditingKey(true)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--bg-secondary)]"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
+              {keySaveMsg && (
+                <span className={`text-xs font-semibold ${keySaveMsg.includes("Failed") ? "text-red-400" : "text-emerald-400"}`}>
+                  {keySaveMsg}
+                </span>
+              )}
+            </div>
+          </div>
+          {target.type === "busibox" && (
+            <div className="flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] rounded-lg">
+              <div>
+                <div className="text-sm font-semibold text-[var(--text)]">Host URL</div>
+                <div className="text-[10px] text-[var(--text-muted)]">Busibox instance URL</div>
+              </div>
+              <span className="text-xs font-mono text-[var(--text-muted)]">
+                {target.config?.host || "Not set"}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
