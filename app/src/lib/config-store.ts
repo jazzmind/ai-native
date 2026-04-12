@@ -12,13 +12,16 @@ function getDb(): Database.Database {
     _db.pragma("journal_mode = WAL");
     _db.exec(`
       CREATE TABLE IF NOT EXISTS config (
-        key TEXT PRIMARY KEY,
+        key TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT 'legacy-user',
         value TEXT NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (key, user_id)
       );
 
       CREATE TABLE IF NOT EXISTS deploy_targets (
         id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL DEFAULT 'legacy-user',
         type TEXT NOT NULL,
         name TEXT NOT NULL,
         config_json TEXT NOT NULL DEFAULT '{}',
@@ -39,11 +42,25 @@ function getDb(): Database.Database {
         FOREIGN KEY (target_id) REFERENCES deploy_targets(id)
       );
     `);
+    runMigrations(_db);
   }
   return _db;
 }
 
-// Simple encryption for credentials at rest using machine-derived key
+function runMigrations(db: Database.Database) {
+  // Migrate deploy_targets: add user_id if missing
+  const dtCols = (db.prepare("PRAGMA table_info(deploy_targets)").all() as any[]).map(r => r.name);
+  if (!dtCols.includes("user_id")) {
+    db.exec("ALTER TABLE deploy_targets ADD COLUMN user_id TEXT NOT NULL DEFAULT 'legacy-user'");
+  }
+
+  // Migrate config: check if user_id column exists
+  const cfgCols = (db.prepare("PRAGMA table_info(config)").all() as any[]).map(r => r.name);
+  if (!cfgCols.includes("user_id")) {
+    db.exec("ALTER TABLE config ADD COLUMN user_id TEXT NOT NULL DEFAULT 'legacy-user'");
+  }
+}
+
 const MACHINE_KEY = crypto.createHash("sha256")
   .update(process.env.CONFIG_ENCRYPTION_KEY || `coach-platform-${process.cwd()}`)
   .digest();
@@ -66,31 +83,32 @@ function decrypt(ciphertext: string): string {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
 
-// ── Config (key-value) ──
+// ── Config (key-value, user-scoped) ──
 
-export function getConfig(key: string): string | null {
-  const row = getDb().prepare("SELECT value FROM config WHERE key = ?").get(key) as { value: string } | undefined;
+export function getConfig(key: string, userId = "legacy-user"): string | null {
+  const row = getDb().prepare("SELECT value FROM config WHERE key = ? AND user_id = ?").get(key, userId) as { value: string } | undefined;
   return row?.value ?? null;
 }
 
-export function setConfig(key: string, value: string): void {
+export function setConfig(key: string, value: string, userId = "legacy-user"): void {
   getDb().prepare(`
-    INSERT INTO config (key, value, updated_at) VALUES (?, ?, datetime('now'))
-    ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')
-  `).run(key, value);
+    INSERT INTO config (key, user_id, value, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(key, user_id) DO UPDATE SET value=excluded.value, updated_at=datetime('now')
+  `).run(key, userId, value);
 }
 
-export function getAllConfig(): Record<string, string> {
-  const rows = getDb().prepare("SELECT key, value FROM config").all() as { key: string; value: string }[];
+export function getAllConfig(userId = "legacy-user"): Record<string, string> {
+  const rows = getDb().prepare("SELECT key, value FROM config WHERE user_id = ?").all(userId) as { key: string; value: string }[];
   const result: Record<string, string> = {};
   for (const r of rows) result[r.key] = r.value;
   return result;
 }
 
-// ── Deploy Targets ──
+// ── Deploy Targets (user-scoped) ──
 
 export interface DeployTarget {
   id: string;
+  userId: string;
   type: "cma" | "busibox";
   name: string;
   config: Record<string, any>;
@@ -109,6 +127,7 @@ function rowToTarget(row: any): DeployTarget {
   }
   return {
     id: row.id,
+    userId: row.user_id || "legacy-user",
     type: row.type,
     name: row.name,
     config: configJson,
@@ -120,11 +139,18 @@ function rowToTarget(row: any): DeployTarget {
   };
 }
 
-export function listTargets(): DeployTarget[] {
+export function listTargets(userId?: string): DeployTarget[] {
+  if (userId) {
+    return getDb().prepare("SELECT * FROM deploy_targets WHERE user_id = ? ORDER BY created_at").all(userId).map(rowToTarget);
+  }
   return getDb().prepare("SELECT * FROM deploy_targets ORDER BY created_at").all().map(rowToTarget);
 }
 
-export function getTarget(id: string): DeployTarget | undefined {
+export function getTarget(id: string, userId?: string): DeployTarget | undefined {
+  if (userId) {
+    const row = getDb().prepare("SELECT * FROM deploy_targets WHERE id = ? AND user_id = ?").get(id, userId);
+    return row ? rowToTarget(row) : undefined;
+  }
   const row = getDb().prepare("SELECT * FROM deploy_targets WHERE id = ?").get(id);
   return row ? rowToTarget(row) : undefined;
 }
@@ -136,22 +162,27 @@ export function upsertTarget(target: DeployTarget): void {
     delete configToStore.apiKey;
   }
   getDb().prepare(`
-    INSERT INTO deploy_targets (id, type, name, config_json, status, last_deployed_at, agent_state_json, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO deploy_targets (id, user_id, type, name, config_json, status, last_deployed_at, agent_state_json, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
-      type=excluded.type, name=excluded.name, config_json=excluded.config_json,
+      user_id=excluded.user_id, type=excluded.type, name=excluded.name, config_json=excluded.config_json,
       status=excluded.status, last_deployed_at=excluded.last_deployed_at,
       agent_state_json=excluded.agent_state_json, updated_at=datetime('now')
   `).run(
-    target.id, target.type, target.name,
+    target.id, target.userId || "legacy-user", target.type, target.name,
     JSON.stringify(configToStore), target.status,
     target.lastDeployedAt, JSON.stringify(target.agentState)
   );
 }
 
-export function deleteTarget(id: string): void {
-  getDb().prepare("DELETE FROM mcp_connections WHERE target_id = ?").run(id);
-  getDb().prepare("DELETE FROM deploy_targets WHERE id = ?").run(id);
+export function deleteTarget(id: string, userId?: string): void {
+  if (userId) {
+    getDb().prepare("DELETE FROM mcp_connections WHERE target_id = ? AND target_id IN (SELECT id FROM deploy_targets WHERE user_id = ?)").run(id, userId);
+    getDb().prepare("DELETE FROM deploy_targets WHERE id = ? AND user_id = ?").run(id, userId);
+  } else {
+    getDb().prepare("DELETE FROM mcp_connections WHERE target_id = ?").run(id);
+    getDb().prepare("DELETE FROM deploy_targets WHERE id = ?").run(id);
+  }
 }
 
 export function updateTargetStatus(id: string, status: DeployTarget["status"], agentState?: Record<string, any>): void {

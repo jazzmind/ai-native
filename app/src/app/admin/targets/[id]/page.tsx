@@ -109,6 +109,7 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
   const agents = Object.entries(target.agentState?.agents || {}) as [string, { id: string; version: number; name: string }][];
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="max-w-4xl mx-auto p-8">
       <Link href="/admin" className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--accent)] mb-6">
         <ArrowLeft size={14} /> Back to Admin
@@ -243,6 +244,7 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }

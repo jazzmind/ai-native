@@ -1,7 +1,6 @@
 import type { KnowledgeProvider } from "./knowledge-provider";
 import { BusiboxKnowledgeProvider } from "./busibox-provider";
 import { StandaloneKnowledgeProvider } from "./standalone-provider";
-import { getConfig } from "@/lib/config-store";
 import { listTargets } from "@/lib/config-store";
 
 let _provider: KnowledgeProvider | null = null;
@@ -25,5 +24,5 @@ export function resetKnowledgeProvider(): void {
   _provider = null;
 }
 
-export type { KnowledgeProvider, SearchResult, Collection, DocumentInput } from "./knowledge-provider";
+export type { KnowledgeProvider, ProviderContext, SearchResult, Collection, DocumentInput, KnowledgeDocument } from "./knowledge-provider";
 export { knowledgeToolPrompt } from "./knowledge-provider";

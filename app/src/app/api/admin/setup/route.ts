@@ -1,7 +1,14 @@
 import { NextRequest } from "next/server";
 import { getAdapter } from "@/lib/deploy";
+import { getRequiredUser, handleAuthError } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  try {
+    await getRequiredUser();
+  } catch (err) {
+    return handleAuthError(err);
+  }
+
   const { type, config } = await req.json();
 
   const adapter = getAdapter(type);

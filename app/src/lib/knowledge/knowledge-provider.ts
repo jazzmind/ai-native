@@ -1,3 +1,8 @@
+export interface ProviderContext {
+  userId: string;
+  projectId?: string; // null/undefined = common knowledge
+}
+
 export interface SearchResult {
   id: string;
   content: string;
@@ -21,22 +26,35 @@ export interface DocumentInput {
   metadata?: Record<string, any>;
 }
 
+export interface KnowledgeDocument {
+  id: string;
+  collection_id: string;
+  title: string;
+  content: string;
+  source: string;
+  metadata: Record<string, any>;
+}
+
 export interface KnowledgeProvider {
   readonly type: string;
 
-  search(query: string, options?: { limit?: number; collection?: string }): Promise<SearchResult[]>;
+  search(ctx: ProviderContext, query: string, options?: { limit?: number; collection?: string }): Promise<SearchResult[]>;
 
-  ingest(doc: DocumentInput, collection?: string): Promise<{ id: string }>;
+  ingest(ctx: ProviderContext, doc: DocumentInput, collection?: string): Promise<{ id: string }>;
 
-  listCollections(): Promise<Collection[]>;
+  listCollections(ctx: ProviderContext): Promise<Collection[]>;
+
+  listDocuments(ctx: ProviderContext, collection?: string): Promise<KnowledgeDocument[]>;
+
+  getDocument(ctx: ProviderContext, id: string): Promise<KnowledgeDocument | null>;
+
+  updateDocument(ctx: ProviderContext, id: string, doc: Partial<DocumentInput>): Promise<void>;
+
+  deleteDocument(ctx: ProviderContext, id: string): Promise<void>;
 
   isAvailable(): Promise<boolean>;
 }
 
-/**
- * Generates a system prompt augmentation that gives a coach access to knowledge search.
- * When a knowledge provider is configured, this describes the tool the coach can use.
- */
 export function knowledgeToolPrompt(providerType: string): string {
   return (
     "\n\n## Knowledge Base Access\n\n" +

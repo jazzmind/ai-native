@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { listMcpConnections, upsertMcpConnection } from "@/lib/config-store";
+import { getRequiredUser, handleAuthError } from "@/lib/auth";
 import { v4 as uuidv4 } from "uuid";
 
 const MCP_SERVERS = [
@@ -9,6 +10,12 @@ const MCP_SERVERS = [
 ];
 
 export async function GET(req: NextRequest) {
+  try {
+    await getRequiredUser();
+  } catch (err) {
+    return handleAuthError(err);
+  }
+
   const { searchParams } = new URL(req.url);
   const targetId = searchParams.get("targetId");
 
@@ -30,6 +37,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    await getRequiredUser();
+  } catch (err) {
+    return handleAuthError(err);
+  }
+
   const body = await req.json();
   const { action, targetId, mcpName, vaultId } = body;
 

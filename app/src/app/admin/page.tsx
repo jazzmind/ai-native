@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const agentCount = (t: Target) => Object.keys(t.agentState?.agents || {}).length;
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="max-w-4xl mx-auto p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -108,6 +109,7 @@ export default function AdminDashboard() {
           );
         })}
       </div>
+    </div>
     </div>
   );
 }

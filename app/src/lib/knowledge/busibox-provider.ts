@@ -1,4 +1,4 @@
-import type { KnowledgeProvider, SearchResult, Collection, DocumentInput } from "./knowledge-provider";
+import type { KnowledgeProvider, ProviderContext, SearchResult, Collection, DocumentInput, KnowledgeDocument } from "./knowledge-provider";
 
 export class BusiboxKnowledgeProvider implements KnowledgeProvider {
   readonly type = "busibox";
@@ -28,7 +28,7 @@ export class BusiboxKnowledgeProvider implements KnowledgeProvider {
     return res.json();
   }
 
-  async search(query: string, options?: { limit?: number; collection?: string }): Promise<SearchResult[]> {
+  async search(_ctx: ProviderContext, query: string, options?: { limit?: number; collection?: string }): Promise<SearchResult[]> {
     const body: Record<string, any> = {
       query,
       limit: options?.limit || 10,
@@ -51,7 +51,7 @@ export class BusiboxKnowledgeProvider implements KnowledgeProvider {
     }));
   }
 
-  async ingest(doc: DocumentInput, collection?: string): Promise<{ id: string }> {
+  async ingest(_ctx: ProviderContext, doc: DocumentInput, collection?: string): Promise<{ id: string }> {
     const body: Record<string, any> = {
       content: doc.content,
       title: doc.title,
@@ -68,7 +68,7 @@ export class BusiboxKnowledgeProvider implements KnowledgeProvider {
     return { id: data.id || data.document_id || "" };
   }
 
-  async listCollections(): Promise<Collection[]> {
+  async listCollections(_ctx: ProviderContext): Promise<Collection[]> {
     try {
       const data = await this.fetch("/api/data/collections");
       const collections = Array.isArray(data) ? data : data.collections || [];
@@ -81,6 +81,51 @@ export class BusiboxKnowledgeProvider implements KnowledgeProvider {
     } catch {
       return [];
     }
+  }
+
+  async listDocuments(_ctx: ProviderContext, collection?: string): Promise<KnowledgeDocument[]> {
+    const endpoint = collection ? `/api/data?collection_id=${collection}` : "/api/data";
+    try {
+      const data = await this.fetch(endpoint);
+      const docs = Array.isArray(data) ? data : data.documents || [];
+      return docs.map((d: any) => ({
+        id: d.id || d.document_id || "",
+        collection_id: d.collection_id || "",
+        title: d.title || d.name || "",
+        content: d.content || d.text || "",
+        source: d.source || "",
+        metadata: d.metadata || {},
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async getDocument(_ctx: ProviderContext, id: string): Promise<KnowledgeDocument | null> {
+    try {
+      const data = await this.fetch(`/api/data/${id}`);
+      return {
+        id: data.id || id,
+        collection_id: data.collection_id || "",
+        title: data.title || "",
+        content: data.content || "",
+        source: data.source || "",
+        metadata: data.metadata || {},
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async updateDocument(_ctx: ProviderContext, id: string, doc: Partial<DocumentInput>): Promise<void> {
+    await this.fetch(`/api/data/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(doc),
+    });
+  }
+
+  async deleteDocument(_ctx: ProviderContext, id: string): Promise<void> {
+    await this.fetch(`/api/data/${id}`, { method: "DELETE" });
   }
 
   async isAvailable(): Promise<boolean> {

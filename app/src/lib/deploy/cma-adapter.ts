@@ -42,6 +42,29 @@ export class CMAAdapter implements DeployAdapter {
     const client = new Anthropic({ apiKey });
     const existingState = config._agentState || {};
     const agents: DeployResult["agents"] = [];
+    const errors: string[] = [];
+
+    // Also try to load state from .deploy-state.json (created by deploy.py)
+    if (!existingState.agents || Object.keys(existingState.agents).length === 0) {
+      try {
+        const fs = await import("fs");
+        const path = await import("path");
+        const stateFile = path.resolve(process.cwd(), "..", ".deploy-state.json");
+        console.log(`[cma-deploy] Looking for deploy state at: ${stateFile}`);
+        if (fs.existsSync(stateFile)) {
+          const fileState = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+          console.log(`[cma-deploy] Loaded .deploy-state.json with ${Object.keys(fileState.agents || {}).length} agents`);
+          if (fileState.agents) existingState.agents = fileState.agents;
+          if (fileState.environment_id) existingState.environment_id = fileState.environment_id;
+        } else {
+          console.log(`[cma-deploy] .deploy-state.json not found`);
+        }
+      } catch (e: any) {
+        console.log(`[cma-deploy] Failed to load .deploy-state.json: ${e.message}`);
+      }
+    } else {
+      console.log(`[cma-deploy] Using existing agent state with ${Object.keys(existingState.agents).length} agents`);
+    }
 
     // Ensure environment exists
     let environmentId = existingState.environment_id;
@@ -61,11 +84,17 @@ export class CMAAdapter implements DeployAdapter {
     const baseCoaches = coaches.filter(c => !c.callable || c.callable.length === 0);
     const dependentCoaches = coaches.filter(c => c.callable && c.callable.length > 0);
 
+    console.log(`[cma-deploy] Base coaches: ${baseCoaches.map(c => c.key).join(", ")}`);
+    console.log(`[cma-deploy] Dependent coaches: ${dependentCoaches.map(c => c.key).join(", ")}`);
+    console.log(`[cma-deploy] Existing state keys: ${Object.keys(existingState.agents || {}).join(", ") || "none"}`);
+    console.log(`[cma-deploy] Environment ID: ${environmentId || "none"}`);
+
     for (const coach of [...baseCoaches, ...dependentCoaches]) {
       try {
         const systemPrompt = buildDatePreamble() + coach.instructions;
         const tools: any[] = [{ type: "agent_toolset_20260401" }];
         const existing = existingState.agents?.[coach.key];
+        console.log(`[cma-deploy] ${coach.key}: existing=${existing ? existing.id + " v" + existing.version : "NEW"}`);
 
         let callableAgents: any[] | undefined;
         if (coach.callable && coach.callable.length > 0) {
@@ -73,38 +102,43 @@ export class CMAAdapter implements DeployAdapter {
           for (const depKey of coach.callable) {
             const dep = existingState.agents?.[depKey] || agents.find(a => a.key === depKey);
             if (dep) {
-              callableAgents.push({ type: "agent", id: dep.agentId || dep.id, version: dep.version });
+              const depId = dep.agentId || dep.id;
+              const depVersion = dep.version;
+              if (depId && depVersion) {
+                callableAgents.push({ type: "agent", id: depId, version: depVersion });
+              }
             }
           }
-        }
-
-        const extraBody: any = {};
-        if (callableAgents && callableAgents.length > 0) {
-          extraBody.callable_agents = callableAgents;
         }
 
         const skills = (coach.skills || []).filter(s => s.skill_id);
 
         let agent: any;
         if (existing) {
-          agent = await (client.beta as any).agents.update(existing.id, {
+          const updateParams: any = {
             version: existing.version,
             system: systemPrompt,
             description: coach.description,
             tools,
             skills: skills.length > 0 ? skills : undefined,
-            extra_body: Object.keys(extraBody).length > 0 ? extraBody : undefined,
-          });
+          };
+          if (callableAgents && callableAgents.length > 0) {
+            updateParams.callable_agents = callableAgents;
+          }
+          agent = await (client.beta as any).agents.update(existing.id, updateParams);
         } else {
-          agent = await (client.beta as any).agents.create({
+          const createParams: any = {
             name: coach.name,
             model: coach.model || "claude-sonnet-4-6",
             system: systemPrompt,
             description: coach.description,
             tools,
             skills: skills.length > 0 ? skills : undefined,
-            extra_body: Object.keys(extraBody).length > 0 ? extraBody : undefined,
-          });
+          };
+          if (callableAgents && callableAgents.length > 0) {
+            createParams.callable_agents = callableAgents;
+          }
+          agent = await (client.beta as any).agents.create(createParams);
         }
 
         agents.push({
@@ -117,11 +151,24 @@ export class CMAAdapter implements DeployAdapter {
         if (!existingState.agents) existingState.agents = {};
         existingState.agents[coach.key] = { id: agent.id, version: agent.version, name: coach.name };
       } catch (e: any) {
+        const errMsg = `${coach.name}: ${e.message}`;
+        console.error(`[cma-deploy] FAILED ${coach.key}: ${e.message}`);
+        errors.push(errMsg);
         agents.push({ key: coach.key, agentId: "", version: 0, name: `${coach.name} (FAILED: ${e.message})` });
       }
     }
 
-    return { success: true, agents, environmentId };
+    const successCount = agents.filter(a => a.agentId).length;
+    if (successCount === 0) {
+      return { success: false, agents, error: `All deployments failed: ${errors.join("; ")}` };
+    }
+
+    return {
+      success: true,
+      agents,
+      environmentId,
+      error: errors.length > 0 ? `${errors.length} agent(s) failed: ${errors.join("; ")}` : undefined,
+    };
   }
 
   async status(config: Record<string, any>, agentState: Record<string, any>): Promise<TargetStatus> {

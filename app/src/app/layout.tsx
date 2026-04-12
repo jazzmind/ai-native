@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppNav } from "@/components/AppNav";
+import { Providers } from "@/components/Providers";
 
 export const metadata: Metadata = {
-  title: "Coach Platform",
-  description: "AI-powered business coaching executive team",
+  title: "AI Executive Team",
+  description: "AI-native advisory team with configurable autonomy modes",
 };
 
 export default function RootLayout({
@@ -15,8 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased flex flex-col h-screen">
-        <AppNav />
-        <div className="flex-1 overflow-hidden">{children}</div>
+        <Providers>
+          <AppNav />
+          <div className="flex-1 overflow-hidden">{children}</div>
+        </Providers>
       </body>
     </html>
   );

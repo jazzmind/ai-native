@@ -1,3 +1,14 @@
+
+
+
+
+1) we should be able to see more insights on what is happening with the agents
+2) it shows thinking, then disappears unless we reload the chat thread; so there's something wrong with the exit condition
+3) we can't see if it's delegated or used tools
+4) we can't see what sort of memories we have build - what our knowledge is (if any) - we need to see this and be able to edit it.
+5) how do our agents learn and adapt to our personality, our style, our needs?
+
+
 I want to create a set of business coach agents. Each agent will be focused on different aspects of the business. They should leverage a secure agentic deployment framework with memory that can evolve as the user and their business evolves.
 
 Coaches I want to create:

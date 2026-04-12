@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { Sidebar } from "@/components/Sidebar";
 import { Chat } from "@/components/Chat";
+import { useProject } from "@/components/ProjectContext";
 
 interface Conversation {
   id: string;
@@ -14,11 +16,19 @@ interface Conversation {
 
 export default function Home() {
   const router = useRouter();
+  const { status } = useSession();
+  const { activeProject, loading: projectLoading } = useProject();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
   useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+      return;
+    }
+    if (status !== "authenticated") return;
+
     fetch("/api/onboarding")
       .then((r) => r.json())
       .then((data) => {
@@ -29,23 +39,25 @@ export default function Home() {
         }
       })
       .catch(() => setCheckingOnboarding(false));
-  }, [router]);
+  }, [router, status]);
 
   const loadConversations = useCallback(async () => {
+    if (!activeProject) return;
     try {
-      const res = await fetch("/api/conversations");
+      const res = await fetch(`/api/conversations?projectId=${activeProject.id}`);
       const data = await res.json();
       setConversations(data.conversations || []);
     } catch {
       // ignore on initial load
     }
-  }, []);
+  }, [activeProject]);
 
   useEffect(() => {
-    if (!checkingOnboarding) {
+    if (!checkingOnboarding && activeProject) {
+      setActiveConversation(null);
       loadConversations();
     }
-  }, [loadConversations, checkingOnboarding]);
+  }, [loadConversations, checkingOnboarding, activeProject]);
 
   const handleNewConversation = () => {
     setActiveConversation(null);
@@ -56,7 +68,7 @@ export default function Home() {
     loadConversations();
   };
 
-  if (checkingOnboarding) {
+  if (status === "loading" || checkingOnboarding || projectLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 size={24} className="animate-spin text-[var(--text-muted)]" />
@@ -90,6 +102,7 @@ export default function Home() {
           <Chat
             conversationId={activeConversation}
             onConversationCreated={handleConversationCreated}
+            projectId={activeProject?.id || ""}
           />
         </main>
       </div>

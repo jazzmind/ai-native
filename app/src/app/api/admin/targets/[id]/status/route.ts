@@ -1,13 +1,21 @@
 import { NextRequest } from "next/server";
 import { getTarget } from "@/lib/config-store";
 import { getAdapter } from "@/lib/deploy";
+import { getRequiredUser, handleAuthError } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user;
+  try {
+    user = await getRequiredUser();
+  } catch (err) {
+    return handleAuthError(err);
+  }
+
   const { id } = await params;
-  const target = getTarget(id);
+  const target = getTarget(id, user.id);
   if (!target) return Response.json({ error: "Target not found" }, { status: 404 });
 
   const adapter = getAdapter(target.type);

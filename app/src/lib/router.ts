@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { COACH_META } from "./coaches";
 import { getAllCoaches, getCoachByKey } from "./coaches-server";
 import type { CoachConfig } from "./coaches";
+import { type AgentMode, isValidMode } from "./modes";
 
 let _client: Anthropic | null = null;
 
@@ -16,6 +17,8 @@ export interface RoutingDecision {
   coaches: CoachConfig[];
   reasoning: string;
   synthesize: boolean;
+  lead?: string;
+  mode: AgentMode;
 }
 
 function extractExplicitMention(message: string): CoachConfig | null {
@@ -28,72 +31,66 @@ function extractExplicitMention(message: string): CoachConfig | null {
   return null;
 }
 
-function scoreByKeywords(message: string): { coach: CoachConfig; score: number }[] {
-  const lower = message.toLowerCase();
-  const coaches = getAllCoaches();
-  return coaches
-    .map((coach) => {
-      const score = coach.keywords.reduce((acc, kw) => {
-        return acc + (lower.includes(kw) ? 1 : 0);
-      }, 0);
-      return { coach, score };
-    })
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score);
-}
-
-export async function routeMessage(message: string): Promise<RoutingDecision> {
+export async function routeMessage(
+  message: string,
+  explicitMode?: AgentMode
+): Promise<RoutingDecision> {
   const explicit = extractExplicitMention(message);
   if (explicit) {
     return {
       coaches: [explicit],
       reasoning: `Explicitly requested @${explicit.key}`,
       synthesize: false,
-    };
-  }
-
-  const keywordResults = scoreByKeywords(message);
-
-  if (keywordResults.length === 1) {
-    return {
-      coaches: [keywordResults[0].coach],
-      reasoning: `Keyword match: ${keywordResults[0].coach.name}`,
-      synthesize: false,
-    };
-  }
-
-  if (keywordResults.length > 1 && keywordResults[0].score > keywordResults[1].score * 2) {
-    return {
-      coaches: [keywordResults[0].coach],
-      reasoning: `Strong keyword match: ${keywordResults[0].coach.name} (score: ${keywordResults[0].score})`,
-      synthesize: false,
+      mode: explicitMode || "advise",
     };
   }
 
   const client = getClient();
   const coachList = COACH_META.map((c) => `- ${c.key}: ${c.name} - ${c.description}`).join("\n");
 
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5",
-    max_tokens: 300,
-    system: `You are a message router for a business coach team. Given a user message, decide which coach(es) should handle it.
+  const modeInstruction = explicitMode
+    ? `The user has explicitly selected "${explicitMode}" mode. Use that mode. Do not override it.`
+    : `Also determine the best operating mode from: advise, coach, plan, assist, execute.
+Auto-detection hints:
+- "help me understand" / "what should I" / "what are the options" -> advise
+- "how do I get better at" / "teach me" / "help me learn" -> coach
+- "create a plan" / "what are the steps" / "roadmap" / "timeline" -> plan
+- "prepare" / "draft" / "put together" / "build me a" -> assist
+- "do it" / "set up" / "send" / "create" / "execute" / "go ahead" -> execute
+Default to "advise" if unclear.`;
 
-Available coaches:
+  const modeCoachCountGuidance = explicitMode
+    ? getModeCoachCountGuidance(explicitMode)
+    : `- "plan" and "advise" modes tend toward 2-4 coaches for broad perspective
+- "execute" mode tends toward 1-2 coaches (most relevant only)
+- "coach" mode often works best with 1 coach for focused dialogue
+- "assist" mode uses 1-3 coaches depending on artifact complexity`;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 400,
+      system: `You are a message router for an AI executive team. Given a user message, decide which advisor(s) should handle it and in what mode.
+
+Available advisors:
 ${coachList}
 
 Respond with ONLY valid JSON (no markdown):
-{"coaches": ["key1", "key2"], "reasoning": "brief explanation", "synthesize": true/false}
+{"coaches": ["key1", "key2", ...], "lead": "key1", "mode": "advise", "reasoning": "brief explanation"}
 
-Rules:
-- Pick 1 coach for focused questions
-- Pick 2-3 coaches for broad topics that span multiple domains
-- Set synthesize=true when multiple coaches are involved and their responses should be combined
-- Never pick more than 3 coaches
-- Default to "founder" if genuinely ambiguous`,
-    messages: [{ role: "user", content: message }],
-  });
+${modeInstruction}
 
-  try {
+Coach selection rules:
+- Pick 2-4 advisors for most business questions since multiple perspectives add value
+- Only pick 1 advisor for very narrow, single-domain questions (e.g. "what's my tax deadline")
+${modeCoachCountGuidance}
+- The "lead" is the most relevant advisor who will synthesize the final response
+- lead MUST be one of the advisors you picked
+- Never pick more than 4 advisors
+- Default to "founder" as lead if genuinely ambiguous`,
+      messages: [{ role: "user", content: message }],
+    });
+
     const text =
       response.content[0].type === "text" ? response.content[0].text : "";
     const parsed = JSON.parse(text);
@@ -105,22 +102,45 @@ Rules:
       const fallback = getAllCoaches()[0];
       return {
         coaches: [fallback],
-        reasoning: "Fallback to Founder Coach",
+        reasoning: "Fallback to Founder Advisor",
         synthesize: false,
+        mode: explicitMode || "advise",
       };
     }
+
+    const lead = parsed.lead || coaches[0].key;
+    const detectedMode = parsed.mode && isValidMode(parsed.mode) ? parsed.mode : "advise";
 
     return {
       coaches,
       reasoning: parsed.reasoning || "LLM classification",
-      synthesize: parsed.synthesize ?? coaches.length > 1,
+      synthesize: coaches.length > 1,
+      lead,
+      mode: explicitMode || detectedMode,
     };
   } catch {
     const fallback = getAllCoaches()[0];
     return {
       coaches: [fallback],
-      reasoning: "Router parse error, defaulting to Founder Coach",
+      reasoning: "Router parse error, defaulting to Founder Advisor",
       synthesize: false,
+      mode: explicitMode || "advise",
     };
+  }
+}
+
+function getModeCoachCountGuidance(mode: AgentMode): string {
+  switch (mode) {
+    case "plan":
+    case "advise":
+      return "- In this mode, prefer 2-4 advisors for broad perspective";
+    case "execute":
+      return "- In execute mode, prefer 1-2 advisors (most relevant only)";
+    case "coach":
+      return "- In coach mode, prefer 1 advisor for focused dialogue";
+    case "assist":
+      return "- In assist mode, prefer 1-3 advisors depending on artifact complexity";
+    default:
+      return "";
   }
 }

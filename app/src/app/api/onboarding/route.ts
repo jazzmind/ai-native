@@ -1,8 +1,10 @@
 import { listTargets } from "@/lib/config-store";
+import { getRequiredUser, handleAuthError } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const targets = listTargets();
+    const user = await getRequiredUser();
+    const targets = listTargets(user.id);
     const hasDeployed = targets.some((t) => t.status === "deployed");
     const hasConfigured = targets.some(
       (t) => t.status === "configured" || t.status === "deployed"
@@ -13,12 +15,7 @@ export async function GET() {
       hasConfigured,
       hasDeployed,
     });
-  } catch {
-    return Response.json({
-      complete: false,
-      hasTargets: false,
-      hasConfigured: false,
-      hasDeployed: false,
-    });
+  } catch (err) {
+    return handleAuthError(err);
   }
 }

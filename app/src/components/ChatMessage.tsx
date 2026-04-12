@@ -3,8 +3,14 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { useState } from "react";
+import { UserPlus } from "lucide-react";
 import { CoachIcon } from "./CoachIcon";
+import { ActivityLog } from "./ActivityLog";
+import { FeedbackButtons } from "./FeedbackButtons";
+import { RequestReviewDialog } from "./RequestReviewDialog";
 import type { CoachIconName } from "@/lib/coaches";
+import type { ActivityItem } from "./Chat";
 
 const mdComponents: Components = {
   h1: ({ children }) => (
@@ -86,13 +92,28 @@ interface ChatMessageProps {
   coachKey?: string | null;
   coachName?: string;
   coachIcon?: CoachIconName | string;
+  isLead?: boolean;
+  isSynthesis?: boolean;
+  isStreaming?: boolean;
+  activity?: ActivityItem[];
+  messageId?: number;
+  conversationId?: string;
+  mode?: string | null;
 }
 
 export function ChatMessage({
   role,
   content,
+  coachKey,
   coachName,
   coachIcon,
+  isLead,
+  isSynthesis,
+  isStreaming,
+  activity,
+  messageId,
+  conversationId,
+  mode,
 }: ChatMessageProps) {
   if (role === "user") {
     return (
@@ -104,21 +125,117 @@ export function ChatMessage({
     );
   }
 
+  if (role === "system") {
+    return (
+      <div className="flex justify-start mb-4">
+        <div className="max-w-[80%] bg-red-900/20 border border-red-800/30 rounded-2xl px-4 py-3 text-sm text-red-300">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  const borderClass = isSynthesis
+    ? "border-yellow-500/40"
+    : isLead
+      ? "border-[var(--accent)]/40"
+      : "border-[var(--border)]";
+
+  const bgClass = isSynthesis ? "bg-yellow-950/20" : "bg-[var(--bg-tertiary)]";
+
   return (
-    <div className="flex justify-start mb-4">
+    <div className="flex justify-start mb-4 group">
       <div className="max-w-[80%]">
         {coachName && (
           <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] mb-1 ml-1">
             <CoachIcon name={coachIcon} size={12} />
-            {coachName}
+            <span>{coachName}</span>
+            {isLead && !isSynthesis && (
+              <span className="text-[10px] bg-[var(--accent)]/20 text-[var(--accent)] px-1.5 py-0.5 rounded-full font-medium">
+                lead
+              </span>
+            )}
+            {isSynthesis && (
+              <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full font-medium">
+                synthesis
+              </span>
+            )}
+            {mode && (
+              <span className="text-[10px] bg-[var(--bg-secondary)] text-[var(--text-muted)] px-1.5 py-0.5 rounded-full">
+                {mode}
+              </span>
+            )}
           </div>
         )}
-        <div className="bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-2xl rounded-bl-sm px-4 py-3 text-sm">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-            {content}
-          </ReactMarkdown>
+        <div
+          className={`${bgClass} border ${borderClass} rounded-2xl rounded-bl-sm px-4 py-3 text-sm`}
+        >
+          {content ? (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={mdComponents}
+            >
+              {content}
+            </ReactMarkdown>
+          ) : isStreaming ? (
+            <span
+              className="inline-block text-[var(--text-muted)]"
+              style={{ animation: "pulse-dot 1.5s infinite" }}
+            >
+              ●●●
+            </span>
+          ) : null}
+
+          {activity && activity.length > 0 && (
+            <ActivityLog activity={activity} />
+          )}
+
+          {!isStreaming && content && messageId && conversationId && (
+            <MessageActions
+              messageId={messageId}
+              conversationId={conversationId}
+              coachKey={coachKey}
+              mode={mode}
+            />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function MessageActions({ messageId, conversationId, coachKey, mode }: {
+  messageId: number;
+  conversationId: string;
+  coachKey?: string | null;
+  mode?: string | null;
+}) {
+  const [showReviewDialog, setShowReviewDialog] = useState(false);
+
+  return (
+    <>
+      <div className="mt-2 pt-1.5 border-t border-[var(--border)] opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-between">
+        <FeedbackButtons
+          messageId={messageId}
+          conversationId={conversationId}
+          coachKey={coachKey}
+          mode={mode}
+        />
+        <button
+          onClick={() => setShowReviewDialog(true)}
+          className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-muted)] hover:text-purple-400 transition-colors"
+          title="Request expert review"
+        >
+          <UserPlus size={12} />
+        </button>
+      </div>
+      {showReviewDialog && (
+        <RequestReviewDialog
+          conversationId={conversationId}
+          messageId={messageId}
+          onClose={() => setShowReviewDialog(false)}
+        />
+      )}
+    </>
   );
 }
