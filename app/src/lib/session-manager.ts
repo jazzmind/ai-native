@@ -40,6 +40,11 @@ export interface StreamEvent {
   usage?: { input_tokens: number; output_tokens: number; cache_read?: number; cache_creation?: number };
 }
 
+// NOTE: CMA sessions API emits `agent.message` events with complete text blocks,
+// not token-by-token `content_block_delta` events. Individual advisor responses
+// arrive as complete messages. Only the synthesis step (using client.messages.stream
+// directly) supports token-level streaming. This is a platform limitation.
+
 export async function* streamCoachResponse(
   sessionId: string,
   message: string,

@@ -12,6 +12,8 @@ import {
 } from "@/lib/db";
 import { getActivityProvider } from "@/lib/activity";
 import { getProfileProvider, formatProfileForPrompt } from "@/lib/profile";
+import { getKnowledgeProvider } from "@/lib/knowledge";
+import { extractFromConversation } from "@/lib/auto-extract";
 import { getRequiredUser, handleAuthError } from "@/lib/auth";
 import { getCoachByKey } from "@/lib/coaches-server";
 import type { CoachConfig } from "@/lib/coaches";
@@ -142,7 +144,31 @@ export async function POST(req: NextRequest) {
       const profileEntries = await profileProvider.list(user.id);
       const profileContext = formatProfileForPrompt(profileEntries);
 
-      // Build contextual message with mode + behaviors + profile + expert feedback
+      // Search knowledge base for relevant context
+      let knowledgeContext = "";
+      try {
+        const knowledgeProvider = getKnowledgeProvider();
+        const available = await knowledgeProvider.isAvailable();
+        if (available) {
+          const results = await knowledgeProvider.search(
+            { userId: user.id, projectId },
+            message,
+            { limit: 5 }
+          );
+          if (results.length > 0) {
+            knowledgeContext = "\n\n[Organizational Knowledge]\n" +
+              results.map((r) => {
+                const title = r.title ? `**${r.title}**: ` : "";
+                const source = r.source ? ` (source: ${r.source})` : "";
+                return `- ${title}${r.content.slice(0, 500)}${source}`;
+              }).join("\n") + "\n";
+          }
+        }
+      } catch {
+        // knowledge search is non-critical
+      }
+
+      // Build contextual message with mode + behaviors + profile + knowledge + expert feedback
       const contextParts: string[] = [];
       contextParts.push(`[MODE: ${activeMode.toUpperCase()}]\n${modeTemplate}`);
 
@@ -151,6 +177,10 @@ export async function POST(req: NextRequest) {
 
       if (profileContext) {
         contextParts.push(`[User Profile Context]${profileContext}`);
+      }
+
+      if (knowledgeContext) {
+        contextParts.push(knowledgeContext);
       }
 
       const activityProvider = getActivityProvider();
@@ -217,6 +247,8 @@ export async function POST(req: NextRequest) {
 
       await Promise.all(coachPromises);
 
+      let finalSynthesisText: string | null = null;
+
       if (synthesize && coaches.length > 1 && coachResponses.size > 1) {
         const leadCoach = coaches.find((c) => c.key === leadKey) || coaches[0];
         send({ type: "synthesis_start", leadKey: leadCoach.key, leadName: leadCoach.name });
@@ -274,12 +306,37 @@ export async function POST(req: NextRequest) {
 
           if (synthesisText) {
             addMessage(convId!, "assistant", synthesisText, "synthesis", activeMode);
+            finalSynthesisText = synthesisText;
           }
         } catch (err) {
           send({ type: "error", content: `Synthesis failed: ${err}` });
         }
 
         send({ type: "synthesis_done" });
+      }
+
+      // Auto-extract profile facts and knowledge from the conversation
+      if (coachResponses.size > 0) {
+        try {
+          send({ type: "extraction_start" });
+
+          const extractionResult = await extractFromConversation(
+            message,
+            coachResponses,
+            finalSynthesisText,
+            user.id,
+            projectId,
+            convId!
+          );
+
+          send({
+            type: "extraction_done",
+            facts: extractionResult.facts,
+            knowledge: extractionResult.knowledge,
+          });
+        } catch {
+          send({ type: "extraction_done", facts: [], knowledge: [] });
+        }
       }
 
       send({ type: "done", conversationId: convId });
