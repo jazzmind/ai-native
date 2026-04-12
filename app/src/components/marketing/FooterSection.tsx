@@ -19,7 +19,7 @@ export default function FooterSection() {
           </a>
         </div>
         <p className="text-sm text-gray-400 dark:text-gray-500">
-          &copy; {new Date().getFullYear()} Quorum. All rights reserved.
+          &copy; {new Date().getFullYear()} AIdvisory. All rights reserved.
         </p>
       </div>
     </footer>

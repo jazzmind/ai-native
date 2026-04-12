@@ -2,7 +2,7 @@
 
 const TESTIMONIALS = [
   {
-    quote: "Quorum replaced three different tools and a monthly advisor retainer. The AI board gives me real answers, not generic advice.",
+    quote: "AIdvisory replaced three different tools and a monthly advisor retainer. The AI board gives me real answers, not generic advice.",
     name: "Coming soon",
     title: "Founder",
     company: "Stealth startup",

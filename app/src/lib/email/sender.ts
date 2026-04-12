@@ -17,12 +17,12 @@ export async function sendEmail(params: {
   subject: string;
   html: string;
 }): Promise<void> {
-  const from = process.env.RESEND_FROM_EMAIL || 'advisors@quorum.app';
+  const from = process.env.RESEND_FROM_EMAIL || 'advisors@aidvisory.ai';
 
   try {
     const resend = getResend();
     await resend.emails.send({
-      from: `Quorum <${from}>`,
+      from: `AIdvisory <${from}>`,
       to: params.to,
       subject: params.subject,
       html: params.html,

@@ -6,7 +6,7 @@ import { PosthogProvider, PosthogIdentifier } from "@/components/PosthogProvider
 import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
-  title: "Quorum — AI Advisory Board",
+  title: "AIdvisory — AI Advisory Board",
   description: "AI-native advisory team with configurable autonomy modes",
 };
 

@@ -6,7 +6,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <header className="border-b border-gray-100 dark:border-gray-800">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white">
-            Quorum
+            AIdvisory
           </Link>
           <div className="flex items-center gap-4">
             <Link

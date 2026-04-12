@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { validateVerificationToken } from '@/lib/verification-codes';
+import { validateVerificationToken, generateVerificationToken } from '@/lib/verification-codes';
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,9 +21,13 @@ export async function POST(req: NextRequest) {
     // Store the profile data — this will be picked up by the JWT callback
     // when signIn("credentials") is called from the client.
     // We return the verified email so the client can use it with signIn.
+    // Issue a fresh verification token for the signIn("credentials") call
+    const signInToken = generateVerificationToken(verified.email);
+
     return Response.json({
       success: true,
       email: verified.email,
+      verificationToken: signInToken,
       profile: {
         firstName: firstName.trim(),
         website: website?.trim() || null,

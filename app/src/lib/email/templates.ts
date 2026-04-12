@@ -6,12 +6,12 @@ function layout(content: string): string {
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1f2937; background: #f9fafb;">
   <div style="text-align: center; padding: 16px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px;">
-    <h1 style="font-size: 20px; font-weight: 700; color: #111827; margin: 0;">Quorum</h1>
+    <h1 style="font-size: 20px; font-weight: 700; color: #111827; margin: 0;">AIdvisory</h1>
   </div>
   ${content}
   <div style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #9ca3af;">
-    <p>Quorum — Your AI Advisory Board</p>
-    <p><a href="${APP_URL}" style="color: #6b7280;">Visit Quorum</a> | <a href="#" style="color: #6b7280;">Unsubscribe</a></p>
+    <p>AIdvisory — Your AI Advisory Board</p>
+    <p><a href="${APP_URL}" style="color: #6b7280;">Visit AIdvisory</a> | <a href="#" style="color: #6b7280;">Unsubscribe</a></p>
   </div>
 </body>
 </html>`;
@@ -31,10 +31,10 @@ export function expertApplicationReceived(expert: { displayName: string; email: 
 
 export function expertApproved(expert: { displayName: string; email: string }) {
   return {
-    subject: `Welcome to the Quorum Expert Network!`,
+    subject: `Welcome to the AIdvisory Expert Network!`,
     html: layout(`
       <h2 style="font-size: 18px; color: #111827;">You're in, ${expert.displayName}!</h2>
-      <p>Your application to the Quorum Expert Network has been approved. You can now receive and accept review requests from founders.</p>
+      <p>Your application to the AIdvisory Expert Network has been approved. You can now receive and accept review requests from founders.</p>
       <p><a href="${APP_URL}/expert/dashboard" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Go to Expert Dashboard</a></p>
     `),
   };
@@ -120,7 +120,7 @@ export function paymentFailed(user: { name: string }, org: { name: string }) {
     html: layout(`
       <h2 style="font-size: 18px; color: #111827;">Payment Failed</h2>
       <p>Hi ${user.name}, we were unable to process your subscription payment for ${org.name}.</p>
-      <p>Please update your payment method to continue using Quorum Pro features.</p>
+      <p>Please update your payment method to continue using AIdvisory Pro features.</p>
       <p><a href="${APP_URL}/settings/billing" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">Update Payment</a></p>
     `),
   };

@@ -201,10 +201,11 @@ export default function SignupPage() {
         return;
       }
 
-      // Sign in with the verified credentials
+      // Sign in with the verified credentials + verification token
       await signIn("credentials", {
         email: data.email,
         name: firstName,
+        verificationToken: data.verificationToken,
         callbackUrl: "/dashboard",
       });
     } catch {
@@ -254,7 +255,7 @@ export default function SignupPage() {
                   <Mail size={24} className="text-blue-600" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  Get started with Quorum
+                  Get started with AIdvisory
                 </h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Your AI advisory board awaits. Enter your email to begin.

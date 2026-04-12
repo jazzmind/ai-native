@@ -43,12 +43,21 @@ providers.push(
   Credentials({
     name: "Email",
     credentials: {
-      email: { label: "Email", type: "email", placeholder: "you@example.com" },
-      name: { label: "Name", type: "text", placeholder: "Your Name" },
+      email: { label: "Email", type: "email" },
+      name: { label: "Name", type: "text" },
+      verificationToken: { label: "Verification Token", type: "text" },
     },
     async authorize(credentials) {
       if (!credentials?.email) return null;
       const email = String(credentials.email).toLowerCase().trim();
+
+      // Require a valid verification token (from TOTP flow)
+      const token = credentials.verificationToken ? String(credentials.verificationToken) : null;
+      if (!token) return null;
+
+      const { validateVerificationToken } = await import("./verification-codes");
+      const verified = validateVerificationToken(token);
+      if (!verified || verified.email !== email) return null;
 
       return {
         id: email,
