@@ -15,23 +15,28 @@ interface DeployState {
 
 let _deployState: DeployState | null = null;
 
-function loadDeployState(): DeployState {
+function loadDeployState(): DeployState | null {
   if (_deployState) return _deployState;
   const statePath = path.resolve(process.cwd(), "..", ".deploy-state.json");
-  const raw = fs.readFileSync(statePath, "utf-8");
-  _deployState = JSON.parse(raw) as DeployState;
-  return _deployState;
+  try {
+    const raw = fs.readFileSync(statePath, "utf-8");
+    _deployState = JSON.parse(raw) as DeployState;
+    return _deployState;
+  } catch {
+    return null;
+  }
 }
 
 export function getAgentId(key: string): string {
   const state = loadDeployState();
+  if (!state) return "";
   const entry = state.agents[key];
-  if (!entry) throw new Error(`Agent '${key}' not found in deploy state`);
+  if (!entry) return "";
   return entry.id;
 }
 
 export function getEnvironmentId(): string {
-  return loadDeployState().environment_id;
+  return loadDeployState()?.environment_id ?? "";
 }
 
 export function getCoachConfig(meta: CoachMeta): CoachConfig {

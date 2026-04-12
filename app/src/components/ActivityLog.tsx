@@ -33,11 +33,11 @@ function ActivityEntry({ item }: { item: ActivityItem }) {
               <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1 rounded">MCP</span>
             )}
           </button>
-          {expanded && item.data.input && (
+          {expanded && item.data.input != null && (
             <pre className="mt-1 ml-5 text-[10px] bg-[#0d0d0d] rounded p-1.5 overflow-x-auto max-h-24 overflow-y-auto">
               {typeof item.data.input === "string"
                 ? item.data.input
-                : JSON.stringify(item.data.input, null, 2)}
+                : JSON.stringify(item.data.input as Record<string, unknown>, null, 2)}
             </pre>
           )}
         </div>
@@ -56,7 +56,7 @@ function ActivityEntry({ item }: { item: ActivityItem }) {
             <Eye size={10} className="text-green-400" />
             <span>{toolName ? `${toolName} result` : "tool result"}</span>
           </button>
-          {expanded && item.data.result && (
+          {expanded && item.data.result != null && (
             <pre className="mt-1 ml-5 text-[10px] bg-[#0d0d0d] rounded p-1.5 overflow-x-auto max-h-24 overflow-y-auto">
               {String(item.data.result)}
             </pre>
