@@ -22,7 +22,7 @@ export default function RootLayout({
           <Providers>
             <PosthogIdentifier />
             <AppNav />
-            <div className="flex-1 overflow-hidden">{children}</div>
+            <div className="flex-1 overflow-auto">{children}</div>
           </Providers>
         </PosthogProvider>
         <Analytics />
