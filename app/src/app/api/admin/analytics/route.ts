@@ -1,4 +1,4 @@
-import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { getRequiredUser, handleAuthError, isAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
 import { organizations, conversations, messages, marketplaceRequests, expertProfiles } from "@/lib/db/schema";
 import { sql, count, eq, gte } from "drizzle-orm";
@@ -6,6 +6,9 @@ import { sql, count, eq, gte } from "drizzle-orm";
 export async function GET() {
   try {
     const user = await getRequiredUser();
+    if (!isAdmin(user.email)) {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
     const db = getDb();
 
     const now = new Date();

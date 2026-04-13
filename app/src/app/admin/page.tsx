@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Cloud, Server, CheckCircle, XCircle, AlertCircle, Loader2, Rocket } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Plus, Cloud, Server, CheckCircle, XCircle, AlertCircle, Loader2, Rocket, Users, TrendingUp, BarChart3 } from "lucide-react";
 
 interface Target {
   id: string;
@@ -27,6 +28,8 @@ const TYPE_LABELS: Record<string, { label: string; Icon: any }> = {
 };
 
 export default function AdminDashboard() {
+  const { data: session } = useSession();
+  const userIsAdmin = (session?.user as any)?.isAdmin === true;
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -53,6 +56,41 @@ export default function AdminDashboard() {
           <Plus size={16} /> Add Target
         </Link>
       </div>
+
+      {userIsAdmin && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Link href="/admin/users"
+            className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--accent)]/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-600"><Users size={18} className="text-white" /></div>
+              <div>
+                <div className="text-sm font-bold text-[var(--text)]">User Management</div>
+                <div className="text-xs text-[var(--text-muted)]">View and manage organizations</div>
+              </div>
+            </div>
+          </Link>
+          <Link href="/admin/growth"
+            className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--accent)]/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-600"><TrendingUp size={18} className="text-white" /></div>
+              <div>
+                <div className="text-sm font-bold text-[var(--text)]">Growth Dashboard</div>
+                <div className="text-xs text-[var(--text-muted)]">Funnels, engagement, churn</div>
+              </div>
+            </div>
+          </Link>
+          <Link href="/admin/analytics"
+            className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--accent)]/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-600"><BarChart3 size={18} className="text-white" /></div>
+              <div>
+                <div className="text-sm font-bold text-[var(--text)]">Platform Analytics</div>
+                <div className="text-xs text-[var(--text-muted)]">Messages, marketplace, experts</div>
+              </div>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {loading && (
         <div className="text-center py-16 text-[var(--text-muted)]">

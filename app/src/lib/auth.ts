@@ -77,7 +77,13 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     async jwt({ token, user, trigger }) {
       if (user) {
-        token.userId = user.id;
+        // Always use email as the canonical userId for data consistency
+        // across auth providers (credentials, GitHub, Google, OIDC)
+        token.userId = user.email?.toLowerCase().trim() || user.id;
+      }
+
+      if (token.email) {
+        token.isAdmin = isAdmin(token.email as string);
       }
 
       // On sign-in, ensure the user has an org
@@ -99,6 +105,13 @@ export const authConfig: NextAuthConfig = {
 
           token.orgId = org.id;
           token.orgPlan = org.plan;
+
+          try {
+            const { trackEvent, Events } = await import("./usage-tracking");
+            trackEvent(org.id, userId, Events.LOGIN, {});
+          } catch {
+            // tracking is non-critical
+          }
         } catch {
           // DB not available (local dev without DATABASE_URL) - continue without org
         }
@@ -125,6 +138,7 @@ export const authConfig: NextAuthConfig = {
         (session.user as any).id = token.userId as string;
         (session.user as any).orgId = token.orgId as string | undefined;
         (session.user as any).orgPlan = token.orgPlan as string | undefined;
+        (session.user as any).isAdmin = token.isAdmin as boolean | undefined;
       }
       return session;
     },
@@ -156,9 +170,10 @@ export async function getRequiredUser(): Promise<{ id: string; email: string; na
   if (!session?.user) {
     throw new AuthError("Not authenticated");
   }
+  const email = session.user.email?.toLowerCase().trim() || "";
   return {
-    id: (session.user as any).id || session.user.email || "unknown",
-    email: session.user.email || "",
+    id: email || (session.user as any).id || "unknown",
+    email,
     name: session.user.name || "",
   };
 }

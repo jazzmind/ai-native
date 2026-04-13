@@ -14,11 +14,12 @@ import { getActivityProvider } from "@/lib/activity";
 import { getProfileProvider, formatProfileForPrompt } from "@/lib/profile";
 import { getKnowledgeProvider } from "@/lib/knowledge";
 import { extractFromConversation } from "@/lib/auto-extract";
-import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { getRequiredUser, getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
 import { getCoachByKey } from "@/lib/coaches-server";
 import type { CoachConfig } from "@/lib/coaches";
 import { type AgentMode, isValidMode } from "@/lib/modes";
 import { loadModeTemplate } from "@/lib/modes-server";
+import { trackEvent, Events } from "@/lib/usage-tracking";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -40,8 +41,11 @@ function formatExpertContext(comments: { author_email: string; author_name: stri
 
 export async function POST(req: NextRequest) {
   let user;
+  let orgId = '';
   try {
-    user = await getRequiredUser();
+    const result = await getRequiredUserAndOrg();
+    user = result.user;
+    orgId = result.org.id;
   } catch (err) {
     return handleAuthError(err);
   }
@@ -66,13 +70,23 @@ export async function POST(req: NextRequest) {
     requestedMode && isValidMode(requestedMode) ? requestedMode : undefined;
 
   let convId = conversationId;
+  let isNewConversation = false;
   if (!convId || !(await getConversation(convId, user.id))) {
     convId = uuidv4();
+    isNewConversation = true;
     const title = message.slice(0, 80) + (message.length > 80 ? "..." : "");
     await createConversation(convId, title, user.id, projectId);
+    trackEvent(orgId, user.id, Events.CONVERSATION_CREATED, { conversationId: convId, projectId });
   }
 
   await addMessage(convId, "user", message, null, explicitMode || null);
+  trackEvent(orgId, user.id, Events.MESSAGE_SENT, {
+    conversationId: convId,
+    projectId,
+    isNewConversation,
+    coachCount: coachKeys?.length || 0,
+    mode: explicitMode || 'auto',
+  });
 
   let coaches: CoachConfig[];
   let synthesize = false;

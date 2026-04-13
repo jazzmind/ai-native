@@ -20,9 +20,9 @@ export default function ExpertNetworkSection() {
             <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto mb-3">
               <DollarSign className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Set your price</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Affordable reviews</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Choose your budget starting at $25. We match you with the best expert for the price.
+              Reviews start at just $10. We match you with the best expert for your domain and budget.
             </p>
           </div>
           <div className="text-center">

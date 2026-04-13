@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { validateVerificationToken, generateVerificationToken } from '@/lib/verification-codes';
+import { trackEvent, Events } from '@/lib/usage-tracking';
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,6 +24,13 @@ export async function POST(req: NextRequest) {
     // We return the verified email so the client can use it with signIn.
     // Issue a fresh verification token for the signIn("credentials") call
     const signInToken = generateVerificationToken(verified.email);
+
+    trackEvent('pending', verified.email, Events.SIGNUP_COMPLETED, {
+      hasWebsite: !!website?.trim(),
+      hasDescription: !!businessDescription?.trim(),
+      businessStage: businessStage || null,
+      hasApiKey: !!apiKey?.trim(),
+    });
 
     return Response.json({
       success: true,

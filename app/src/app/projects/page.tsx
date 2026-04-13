@@ -9,9 +9,10 @@ import {
   Edit3,
   Save,
   X,
-  Share2,
   Check,
   Star,
+  MessageSquare,
+  MessagesSquare,
 } from "lucide-react";
 
 export default function ProjectsPage() {
@@ -47,8 +48,13 @@ export default function ProjectsPage() {
 
   const handleDelete = async (id: string) => {
     const project = projects.find((p) => p.id === id);
-    if (project?.is_default) return;
-    if (!confirm(`Delete project "${project?.name}"? All conversations and knowledge in this project will be permanently deleted.`)) return;
+    if (!project) return;
+    const isOnlyProject = projects.length <= 1;
+    if (isOnlyProject) {
+      alert("You must have at least one project.");
+      return;
+    }
+    if (!confirm(`Delete project "${project.name}"? All conversations and knowledge in this project will be permanently deleted.`)) return;
     await deleteProject(id);
   };
 
@@ -156,6 +162,9 @@ export default function ProjectsPage() {
               );
             }
 
+            const convCount = project.conversationCount || 0;
+            const msgCount = project.messageCount || 0;
+
             return (
               <div
                 key={project.id}
@@ -167,7 +176,7 @@ export default function ProjectsPage() {
                 onClick={() => setActiveProjectId(project.id)}
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold">{project.name}</span>
                       {project.is_default ? (
@@ -182,11 +191,21 @@ export default function ProjectsPage() {
                     {project.description && (
                       <p className="text-xs text-[var(--text-muted)] mt-1">{project.description}</p>
                     )}
-                    <p className="text-[10px] text-[var(--text-muted)] mt-2">
-                      Created {new Date(project.created_at).toLocaleDateString()}
-                    </p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                        <MessagesSquare size={12} />
+                        {convCount} conversation{convCount !== 1 ? "s" : ""}
+                      </span>
+                      <span className="flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                        <MessageSquare size={12} />
+                        {msgCount} message{msgCount !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)]">
+                        Created {new Date(project.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex gap-1 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => {
                         setEditingId(project.id);
@@ -197,7 +216,7 @@ export default function ProjectsPage() {
                     >
                       <Edit3 size={14} />
                     </button>
-                    {!project.is_default && (
+                    {projects.length > 1 && (
                       <button
                         onClick={() => handleDelete(project.id)}
                         className="p-1.5 text-[var(--text-muted)] hover:text-red-400 rounded"

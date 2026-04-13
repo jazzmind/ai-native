@@ -27,7 +27,9 @@ export {
   deleteProject,
   getOrCreateDefaultProject,
   countProjects,
+  getProjectStats,
   type Project,
+  type ProjectStats,
 } from './queries/projects';
 
 // Conversations & Messages

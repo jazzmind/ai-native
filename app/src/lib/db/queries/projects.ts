@@ -1,7 +1,7 @@
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc, asc, count, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../client';
-import { projects, conversations, knowledgeShares } from '../schema';
+import { projects, conversations, messages, knowledgeShares } from '../schema';
 
 export interface Project {
   id: string;
@@ -116,4 +116,27 @@ export async function countProjects(orgId: string): Promise<number> {
   const db = getDb();
   const rows = await db.select().from(projects).where(eq(projects.orgId, orgId));
   return rows.length;
+}
+
+export interface ProjectStats {
+  projectId: string;
+  conversationCount: number;
+  messageCount: number;
+}
+
+export async function getProjectStats(userId: string): Promise<ProjectStats[]> {
+  const db = getDb();
+
+  const stats = await db
+    .select({
+      projectId: conversations.projectId,
+      conversationCount: count(conversations.id),
+      messageCount: sql<number>`cast(count(${messages.id}) as int)`,
+    })
+    .from(conversations)
+    .leftJoin(messages, eq(messages.conversationId, conversations.id))
+    .where(eq(conversations.userId, userId))
+    .groupBy(conversations.projectId);
+
+  return stats;
 }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { generateVerificationCode } from '@/lib/verification-codes';
 import { sendEmail } from '@/lib/email';
+import { trackEvent, Events } from '@/lib/usage-tracking';
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
 </body>
 </html>`,
     });
+
+    trackEvent('pending', normalizedEmail, Events.SIGNUP_STARTED, { email: normalizedEmail });
 
     return Response.json({ sent: true });
   } catch (err) {

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { verifyCode, generateVerificationToken } from '@/lib/verification-codes';
+import { trackEvent, Events } from '@/lib/usage-tracking';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     const token = generateVerificationToken(email);
+    trackEvent('pending', email.toLowerCase().trim(), Events.SIGNUP_EMAIL_VERIFIED, {});
 
     return Response.json({ verified: true, token });
   } catch (err) {

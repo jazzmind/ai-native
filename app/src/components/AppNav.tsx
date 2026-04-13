@@ -11,14 +11,14 @@ import { useState, useRef, useEffect } from "react";
 import { useProject } from "./ProjectContext";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Team", Icon: MessageSquare },
-  { href: "/knowledge", label: "Knowledge", Icon: BookOpen },
-  { href: "/behaviors", label: "Behaviors", Icon: Brain },
-  { href: "/effectiveness", label: "Effectiveness", Icon: BarChart3 },
-  { href: "/reviews", label: "Reviews", Icon: UserCheck },
-  { href: "/projects", label: "Projects", Icon: FolderKanban },
-  { href: "/settings/tools", label: "Tools", Icon: Shield },
-  { href: "/admin", label: "Admin", Icon: Settings },
+  { href: "/dashboard", label: "Team", Icon: MessageSquare, adminOnly: false },
+  { href: "/knowledge", label: "Knowledge", Icon: BookOpen, adminOnly: false },
+  { href: "/behaviors", label: "Behaviors", Icon: Brain, adminOnly: false },
+  { href: "/effectiveness", label: "Effectiveness", Icon: BarChart3, adminOnly: false },
+  { href: "/reviews", label: "Reviews", Icon: UserCheck, adminOnly: false },
+  { href: "/projects", label: "Projects", Icon: FolderKanban, adminOnly: false },
+  { href: "/settings/tools", label: "Tools", Icon: Shield, adminOnly: false },
+  { href: "/admin", label: "Admin", Icon: Settings, adminOnly: true },
 ] as const;
 
 export function AppNav() {
@@ -66,7 +66,12 @@ export function AppNav() {
 
       {!isOnboarding && session && (
         <>
-          {NAV_ITEMS.map(({ href, label, Icon }) => {
+          {NAV_ITEMS.filter(item => {
+            if ('adminOnly' in item && item.adminOnly) {
+              return (session.user as any)?.isAdmin === true;
+            }
+            return true;
+          }).map(({ href, label, Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link

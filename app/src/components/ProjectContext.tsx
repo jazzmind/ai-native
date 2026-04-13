@@ -11,6 +11,8 @@ export interface Project {
   is_default: number;
   created_at: string;
   updated_at: string;
+  conversationCount?: number;
+  messageCount?: number;
 }
 
 interface ProjectContextValue {

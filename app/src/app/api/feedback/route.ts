@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
-import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { getRequiredUser, getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
 import {
   addFeedback,
   getFeedbackForMessage,
   getFeedbackStats,
 } from "@/lib/db";
+import { trackEvent, Events } from "@/lib/usage-tracking";
 
 export async function GET(req: NextRequest) {
   let user;
@@ -33,8 +34,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   let user;
+  let orgId = '';
   try {
-    user = await getRequiredUser();
+    const result = await getRequiredUserAndOrg();
+    user = result.user;
+    orgId = result.org.id;
   } catch (err) {
     return handleAuthError(err);
   }
@@ -71,6 +75,14 @@ export async function POST(req: NextRequest) {
     mode,
     comment
   );
+
+  trackEvent(orgId, user.id, Events.FEEDBACK_GIVEN, {
+    rating,
+    coachKey,
+    mode,
+    conversationId,
+    hasComment: !!comment,
+  });
 
   return Response.json(feedback);
 }

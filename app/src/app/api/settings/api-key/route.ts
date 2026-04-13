@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getRequiredUserAndOrg, handleAuthError, AuthError } from "@/lib/auth";
 import { storeApiKey, getApiKeyInfo, deleteApiKey } from "@/lib/db/queries/api-keys";
+import { trackEvent, Events } from "@/lib/usage-tracking";
 
 export async function GET() {
   try {
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await storeApiKey(org.id, user.id, key, provider);
+    trackEvent(org.id, user.id, Events.API_KEY_ADDED, { provider });
     return Response.json({ ok: true, hint: result.hint });
   } catch (err) {
     return handleAuthError(err);
@@ -41,6 +43,7 @@ export async function DELETE() {
   try {
     const { user, org } = await getRequiredUserAndOrg();
     await deleteApiKey(org.id, user.id);
+    trackEvent(org.id, user.id, Events.API_KEY_REMOVED, {});
     return Response.json({ ok: true });
   } catch (err) {
     return handleAuthError(err);
