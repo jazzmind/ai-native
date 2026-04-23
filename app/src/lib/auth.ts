@@ -90,17 +90,17 @@ export const authConfig: NextAuthConfig = {
       if (trigger === "signIn" && token.userId) {
         try {
           const { getUserOrganization, createOrganization } = await import("./db");
+          const { consumePendingProfile } = await import("./pending-profiles");
           const userId = token.userId as string;
           let org = await getUserOrganization(userId);
 
           if (!org) {
-            const name = token.name
-              ? `${token.name}'s Team`
-              : "My Team";
             const email = (token.email || userId).toLowerCase();
+            const profile = consumePendingProfile(email);
+            const orgDisplayName = profile?.companyName || (token.name ? `${token.name}'s Team` : "My Team");
             const slugBase = email.split("@")[0].replace(/[^a-z0-9]/g, "-");
             const slug = `${slugBase}-${Date.now().toString(36)}`;
-            org = await createOrganization(name, slug, userId, "free");
+            org = await createOrganization(orgDisplayName, slug, userId, "free", profile?.companyName || undefined);
           }
 
           token.orgId = org.id;

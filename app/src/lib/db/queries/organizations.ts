@@ -6,6 +6,7 @@ import { organizations, orgMemberships, conversations, messages, userApiKeys } f
 export interface Organization {
   id: string;
   name: string;
+  companyName: string | null;
   slug: string;
   plan: 'free' | 'pro' | 'team';
   stripeCustomerId: string | null;
@@ -23,7 +24,8 @@ export async function createOrganization(
   name: string,
   slug: string,
   ownerUserId: string,
-  plan: 'free' | 'pro' | 'team' = 'free'
+  plan: 'free' | 'pro' | 'team' = 'free',
+  companyName?: string,
 ): Promise<Organization> {
   const db = getDb();
   const orgId = uuidv4();
@@ -32,6 +34,7 @@ export async function createOrganization(
   await db.insert(organizations).values({
     id: orgId,
     name,
+    companyName: companyName || null,
     slug,
     plan,
   });

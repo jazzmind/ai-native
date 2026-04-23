@@ -18,6 +18,7 @@ import { relations } from 'drizzle-orm';
 export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  companyName: text('company_name'),
   slug: text('slug').notNull().unique(),
   plan: text('plan', { enum: ['free', 'pro', 'team'] }).notNull().default('free'),
   stripeCustomerId: text('stripe_customer_id'),
@@ -106,6 +107,59 @@ export const messages = pgTable('messages', {
   content: text('content').notNull(),
   coachKey: text('coach_key'),
   mode: text('mode'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// ══════════════════════════════════════════════
+// Message Attachments (file uploads)
+// ══════════════════════════════════════════════
+
+export const messageAttachments = pgTable('message_attachments', {
+  id: text('id').primaryKey(),
+  messageId: integer('message_id'),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id),
+  filename: text('filename').notNull(),
+  mimeType: text('mime_type').notNull(),
+  blobUrl: text('blob_url').notNull(),
+  extractedText: text('extracted_text'),
+  fileSize: integer('file_size').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// ══════════════════════════════════════════════
+// Agent Tasks (proactive agent scheduling)
+// ══════════════════════════════════════════════
+
+export const agentTasks = pgTable('agent_tasks', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  projectId: text('project_id').notNull(),
+  conversationId: text('conversation_id'),
+  taskType: text('task_type', { enum: ['coaching_followup', 'reminder', 'deadline', 'check_in'] }).notNull(),
+  coachKey: text('coach_key').notNull(),
+  status: text('status', { enum: ['pending', 'triggered', 'completed', 'dismissed'] }).notNull().default('pending'),
+  triggerAt: timestamp('trigger_at').notNull(),
+  repeatInterval: text('repeat_interval'),
+  context: jsonb('context'),
+  lastTriggeredAt: timestamp('last_triggered_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// ══════════════════════════════════════════════
+// Notifications
+// ══════════════════════════════════════════════
+
+export const notifications = pgTable('notifications', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  type: text('type', { enum: ['agent_message', 'review_complete', 'task_due'] }).notNull(),
+  title: text('title').notNull(),
+  body: text('body'),
+  conversationId: text('conversation_id'),
+  readAt: timestamp('read_at'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

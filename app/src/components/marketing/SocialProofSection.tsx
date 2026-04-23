@@ -7,7 +7,7 @@ const VALUE_PROPS = [
   {
     heading: "On-demand expert review",
     description:
-      "When the stakes are high, get a human expert to review your AI-generated advice. Reviews start at $10 and are delivered in ~4 hours.",
+      "When the stakes are high, get a human expert to review your AI-generated advice. Reviews start at $25 and are delivered in ~4 hours.",
   },
   {
     heading: "Built for founders",

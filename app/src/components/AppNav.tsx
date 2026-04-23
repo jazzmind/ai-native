@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useProject } from "./ProjectContext";
+import { NotificationBell } from "./NotificationBell";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Team", Icon: MessageSquare, adminOnly: false },
@@ -89,6 +90,8 @@ export function AppNav() {
           })}
 
           <div className="ml-auto flex items-center gap-2">
+            <NotificationBell />
+
             {/* Project Switcher */}
             <div ref={projectRef} className="relative">
               <button

@@ -22,7 +22,7 @@ export default function ExpertNetworkSection() {
             </div>
             <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Affordable reviews</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Reviews start at just $10. We match you with the best expert for your domain and budget.
+              Reviews start at just $25. We match you with the best expert for your domain and budget.
             </p>
           </div>
           <div className="text-center">

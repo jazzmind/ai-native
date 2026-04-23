@@ -20,6 +20,8 @@ import type { CoachConfig } from "@/lib/coaches";
 import { type AgentMode, isValidMode } from "@/lib/modes";
 import { loadModeTemplate } from "@/lib/modes-server";
 import { trackEvent, Events } from "@/lib/usage-tracking";
+import { detectReviewNeed } from "@/lib/review-detector";
+import { parseTaskBlocks } from "@/lib/parse-tasks";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -51,12 +53,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { message, conversationId, coachKeys, projectId, mode: requestedMode } = body as {
+  const { message, conversationId, coachKeys, projectId, mode: requestedMode, attachments } = body as {
     message: string;
     conversationId?: string;
     coachKeys?: string[];
     projectId: string;
     mode?: string;
+    attachments?: { fileId: string; filename: string; extractedText: string; mimeType: string }[];
   };
 
   if (!message?.trim()) {
@@ -195,6 +198,16 @@ export async function POST(req: NextRequest) {
 
       if (knowledgeContext) {
         contextParts.push(knowledgeContext);
+      }
+
+      if (attachments && attachments.length > 0) {
+        const attachmentContext = attachments.map(a => {
+          const text = a.extractedText
+            ? `\n${a.extractedText.slice(0, 15000)}`
+            : '\n[Binary file — no text extracted]';
+          return `[Attached Document: ${a.filename} (${a.mimeType})]${text}`;
+        }).join('\n\n');
+        contextParts.push(attachmentContext);
       }
 
       const activityProvider = getActivityProvider();
@@ -350,6 +363,50 @@ export async function POST(req: NextRequest) {
           });
         } catch {
           send({ type: "extraction_done", facts: [], knowledge: [] });
+        }
+
+        // Detect if human review would be valuable
+        try {
+          const reviewResult = await detectReviewNeed(message, coachResponses, activeMode);
+          if (reviewResult.shouldSuggest) {
+            send({
+              type: "review_suggestion",
+              reason: reviewResult.reason,
+              domain: reviewResult.domain,
+              urgency: reviewResult.urgency,
+            });
+          }
+        } catch {
+          // review detection is non-critical
+        }
+
+        // Parse :::task blocks from responses and create agent tasks
+        try {
+          for (const [coachKey, responseText] of coachResponses) {
+            const tasks = parseTaskBlocks(responseText);
+            for (const task of tasks) {
+              const { createAgentTask } = await import("@/lib/db");
+              const agentTask = await createAgentTask({
+                orgId,
+                userId: user.id,
+                projectId,
+                conversationId: convId!,
+                taskType: task.type,
+                coachKey,
+                triggerAt: task.triggerAt,
+                repeatInterval: task.repeatInterval || null,
+                context: { title: task.title, originalMessage: message },
+              });
+              send({
+                type: "task_created",
+                taskId: agentTask.id,
+                title: task.title,
+                triggerDescription: task.triggerDescription,
+              });
+            }
+          }
+        } catch {
+          // task creation is non-critical
         }
       }
 

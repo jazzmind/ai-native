@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
 import { validateVerificationToken, generateVerificationToken } from '@/lib/verification-codes';
 import { trackEvent, Events } from '@/lib/usage-tracking';
+import { storePendingProfile } from '@/lib/pending-profiles';
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, firstName, website, businessDescription, businessStage, apiKey } = await req.json();
+    const { token, firstName, companyName, website, businessDescription, businessStage, apiKey } = await req.json();
 
     if (!token) {
       return Response.json({ error: 'Verification token is required' }, { status: 400 });
@@ -19,10 +20,11 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'First name is required' }, { status: 400 });
     }
 
-    // Store the profile data — this will be picked up by the JWT callback
-    // when signIn("credentials") is called from the client.
-    // We return the verified email so the client can use it with signIn.
-    // Issue a fresh verification token for the signIn("credentials") call
+    storePendingProfile(verified.email, {
+      companyName: companyName?.trim() || undefined,
+      firstName: firstName.trim(),
+    });
+
     const signInToken = generateVerificationToken(verified.email);
 
     trackEvent('pending', verified.email, Events.SIGNUP_COMPLETED, {

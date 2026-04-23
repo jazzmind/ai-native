@@ -8,6 +8,8 @@ import { CoachIcon } from "./CoachIcon";
 import { ModeSelector } from "./ModeSelector";
 import { ExpertCommentDisplay } from "./ExpertComment";
 import { TabbedAdvisorResponse, type AdvisorTab } from "./TabbedAdvisorResponse";
+import { ReviewSuggestionBanner } from "./ReviewSuggestionBanner";
+import { FileDropZone, type UploadedFile } from "./FileDropZone";
 import { COACH_META } from "@/lib/coaches";
 import type { CoachIconName, AgentMode } from "@/lib/coaches";
 
@@ -39,6 +41,7 @@ interface DisplayMessage {
   mode?: string | null;
   expertData?: ExpertCommentData;
   turnId?: string;
+  attachments?: { filename: string; mimeType: string }[];
 }
 
 interface TabbedTurn {
@@ -196,6 +199,16 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
   // Multi-advisor streaming state
   const [streamingTurn, setStreamingTurn] = useState<TabbedTurn | null>(null);
 
+  // Review suggestion state
+  const [reviewSuggestion, setReviewSuggestion] = useState<{
+    reason: string;
+    domain: string;
+    urgency: 'low' | 'medium' | 'high';
+  } | null>(null);
+
+  // File upload state
+  const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const currentConvId = useRef<string | null>(conversationId);
@@ -281,24 +294,31 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingTurn]);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
+  const sendMessage = useCallback(async (directText?: string) => {
+    const text = (directText || input).trim();
     if (!text || isStreaming) return;
 
-    setInput("");
+    if (!directText) setInput("");
     setIsStreaming(true);
     setRoutingInfo(null);
     setActiveCoaches(new Set());
     setActiveMode(null);
     setStreamingTurn(null);
     setIsLearning(false);
+    setReviewSuggestion(null);
+
+    const attachments = pendingFiles.length > 0
+      ? pendingFiles.map(f => ({ fileId: f.fileId, filename: f.filename, extractedText: f.extractedText, mimeType: f.mimeType }))
+      : undefined;
 
     const userMsg: DisplayMessage = {
       id: `user-${Date.now()}`,
       role: "user",
       content: text,
+      attachments: attachments?.map(a => ({ filename: a.filename, mimeType: a.mimeType })),
     };
     setMessages((prev) => [...prev, userMsg]);
+    setPendingFiles([]);
 
     const liveActivity: Map<string, ActivityItem[]> = new Map();
     let isMultiAdvisor = false;
@@ -317,6 +337,7 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
           coachKeys: selectedCoaches.length > 0 ? selectedCoaches : undefined,
           projectId,
           mode: selectedMode !== "auto" ? selectedMode : undefined,
+          attachments,
         }),
       });
 
@@ -516,6 +537,25 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
                 break;
               }
 
+              case "review_suggestion":
+                setReviewSuggestion({
+                  reason: event.reason,
+                  domain: event.domain,
+                  urgency: event.urgency,
+                });
+                break;
+
+              case "task_created":
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `task-${Date.now()}`,
+                    role: "system" as const,
+                    content: `📋 Task scheduled: "${event.title}" — ${event.triggerDescription}`,
+                  },
+                ]);
+                break;
+
               case "extraction_start":
                 setIsLearning(true);
                 break;
@@ -598,6 +638,7 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
       sendMessage();
     }
   };
+
 
   const placeholderText =
     selectedCoaches.length === 0
@@ -682,6 +723,7 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
               messageId={msg.messageId}
               conversationId={currentConvId.current || undefined}
               mode={msg.mode}
+              onSendMessage={sendMessage}
             />
           );
         })}
@@ -724,6 +766,17 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
           </div>
         )}
 
+        {/* Review suggestion */}
+        {reviewSuggestion && currentConvId.current && (
+          <ReviewSuggestionBanner
+            reason={reviewSuggestion.reason}
+            domain={reviewSuggestion.domain}
+            urgency={reviewSuggestion.urgency}
+            conversationId={currentConvId.current}
+            onDismiss={() => setReviewSuggestion(null)}
+          />
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -738,6 +791,11 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
           <ModeSelector selected={selectedMode} onSelect={setSelectedMode} />
           <CoachSelector selectedCoaches={selectedCoaches} onSelect={setSelectedCoaches} />
         </div>
+        <FileDropZone
+          files={pendingFiles}
+          onFilesChange={setPendingFiles}
+          disabled={isStreaming}
+        />
         <div className="flex gap-2">
           <textarea
             ref={inputRef}
@@ -750,7 +808,7 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
             disabled={isStreaming}
           />
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={isStreaming || !input.trim()}
             className="px-4 py-3 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors"
           >

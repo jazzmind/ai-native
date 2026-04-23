@@ -11,7 +11,6 @@ import {
   Key,
   Sparkles,
   Crown,
-  Users,
   Lock,
   Globe,
   Building2,
@@ -25,6 +24,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [firstName, setFirstName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [businessMode, setBusinessMode] = useState<"website" | "description" | "unsure" | null>(null);
   const [website, setWebsite] = useState("");
   const [businessDescription, setBusinessDescription] = useState("");
@@ -189,6 +189,7 @@ export default function SignupPage() {
         body: JSON.stringify({
           token: verificationToken,
           firstName,
+          companyName: companyName.trim() || undefined,
           website: businessMode === "website" ? website : undefined,
           businessDescription: businessMode === "description" ? businessDescription : undefined,
           businessStage: businessMode === "unsure" ? "exploring" : undefined,
@@ -404,6 +405,22 @@ export default function SignupPage() {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Company name
+                  </label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Acme Inc."
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Optional — helps your advisors understand your context.
+                  </p>
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Tell us about your business
                   </label>
@@ -537,14 +554,18 @@ export default function SignupPage() {
                     </label>
                     <div className="flex gap-2">
                       <input
-                        type="password"
+                        type="text"
                         value={apiKey}
                         onChange={(e) => {
                           setApiKey(e.target.value);
                           setKeyValid(null);
                         }}
                         placeholder="sk-ant-api03-..."
+                        autoComplete="off"
+                        data-1p-ignore
+                        data-lpignore="true"
                         className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-xs"
+                        style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
                       />
                       <button
                         onClick={() => validateApiKey(apiKey)}
@@ -597,20 +618,6 @@ export default function SignupPage() {
                   </p>
                 </div>
 
-                {/* Team — greyed out */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 opacity-50 cursor-not-allowed relative overflow-hidden">
-                  <div className="absolute top-2 right-2">
-                    <Lock size={14} className="text-gray-400" />
-                  </div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users size={16} className="text-purple-500" />
-                    <span className="font-bold text-gray-900 dark:text-white">Team</span>
-                    <span className="text-sm text-gray-500 ml-auto">$149/mo</span>
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    5 seats, 50 projects, team collaboration, priority support. Coming soon.
-                  </p>
-                </div>
               </div>
 
               {error && (

@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/process-bids",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/heartbeat",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

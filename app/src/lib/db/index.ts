@@ -120,6 +120,23 @@ export {
   type ToolTrust,
 } from './queries/tool-trust';
 
+// Agent Tasks
+export {
+  createAgentTask,
+  getDueTasks,
+  markTaskTriggered,
+  rescheduleTask,
+  dismissTask,
+} from './queries/agent-tasks';
+
+// Notifications
+export {
+  createNotification,
+  getUnreadNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from './queries/notifications';
+
 // API Keys — NOT re-exported here because api-keys.ts imports encryption.ts
 // which uses Node.js crypto, incompatible with Edge Runtime (middleware).
 // Import directly: import { storeApiKey, ... } from '@/lib/db/queries/api-keys';

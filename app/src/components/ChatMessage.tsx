@@ -3,13 +3,15 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { UserPlus } from "lucide-react";
 import { CoachIcon } from "./CoachIcon";
 import { ActivityLog } from "./ActivityLog";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { CopyButtons } from "./CopyButtons";
 import { RequestReviewDialog } from "./RequestReviewDialog";
+import { MultipleChoiceCard } from "./MultipleChoiceCard";
+import { splitContentAndChoices } from "@/lib/parse-choices";
 import type { CoachIconName } from "@/lib/coaches";
 import type { ActivityItem } from "./Chat";
 
@@ -100,6 +102,8 @@ interface ChatMessageProps {
   messageId?: number;
   conversationId?: string;
   mode?: string | null;
+  onSendMessage?: (message: string) => void;
+  attachments?: { filename: string; mimeType: string }[];
 }
 
 export function ChatMessage({
@@ -115,11 +119,22 @@ export function ChatMessage({
   messageId,
   conversationId,
   mode,
+  onSendMessage,
+  attachments,
 }: ChatMessageProps) {
   if (role === "user") {
     return (
       <div className="flex justify-end mb-4">
         <div className="max-w-[80%] bg-[var(--accent)] text-white rounded-2xl rounded-br-sm px-4 py-3 text-sm whitespace-pre-wrap">
+          {attachments && attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {attachments.map((a, i) => (
+                <span key={i} className="inline-flex items-center gap-1 bg-white/20 rounded-lg px-2 py-1 text-xs">
+                  📎 {a.filename}
+                </span>
+              ))}
+            </div>
+          )}
           {content}
         </div>
       </div>
@@ -172,12 +187,11 @@ export function ChatMessage({
           className={`${bgClass} border ${borderClass} rounded-2xl rounded-bl-sm px-4 py-3 text-sm`}
         >
           {content ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={mdComponents}
-            >
-              {content}
-            </ReactMarkdown>
+            <ChoicesAwareContent
+              content={content}
+              onSendMessage={onSendMessage}
+              isStreaming={isStreaming}
+            />
           ) : isStreaming ? (
             <span
               className="inline-block text-[var(--text-muted)]"
@@ -204,6 +218,51 @@ export function ChatMessage({
       </div>
     </div>
   );
+}
+
+function ChoicesAwareContent({
+  content,
+  onSendMessage,
+  isStreaming,
+}: {
+  content: string;
+  onSendMessage?: (message: string) => void;
+  isStreaming?: boolean;
+}) {
+  const { textParts, choiceBlocks } = splitContentAndChoices(content);
+
+  if (choiceBlocks.length === 0) {
+    return (
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+        {content}
+      </ReactMarkdown>
+    );
+  }
+
+  const elements: React.ReactNode[] = [];
+  for (let i = 0; i < textParts.length; i++) {
+    if (textParts[i]) {
+      elements.push(
+        <ReactMarkdown key={`text-${i}`} remarkPlugins={[remarkGfm]} components={mdComponents}>
+          {textParts[i]}
+        </ReactMarkdown>
+      );
+    }
+    if (i < choiceBlocks.length) {
+      elements.push(
+        <MultipleChoiceCard
+          key={`choice-${i}`}
+          title={choiceBlocks[i].title}
+          options={choiceBlocks[i].options}
+          hasWriteIn={choiceBlocks[i].hasWriteIn}
+          onSelect={(choice) => onSendMessage?.(choice)}
+          disabled={isStreaming || !onSendMessage}
+        />
+      );
+    }
+  }
+
+  return <>{elements}</>;
 }
 
 function MessageActions({ messageId, conversationId, coachKey, mode, content }: {
