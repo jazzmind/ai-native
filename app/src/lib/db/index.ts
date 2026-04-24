@@ -129,6 +129,17 @@ export {
   dismissTask,
 } from './queries/agent-tasks';
 
+// EA Memory (Chief of Staff)
+export {
+  upsertEaMemory,
+  getEaMemory,
+  listEaMemory,
+  deleteEaMemory,
+  formatEaMemoryForPrompt,
+  type EaMemoryEntry,
+  type EaMemoryType,
+} from './queries/ea-memory';
+
 // Notifications
 export {
   createNotification,

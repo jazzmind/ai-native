@@ -130,6 +130,15 @@ COACH_CONFIGS = [
         "mcp": ["notion", "slack"],
         "skills": [],
     },
+    {
+        "name": "Chief of Staff",
+        "dir": "ea",
+        "model": "claude-sonnet-4-6",
+        "description": "Executive assistant and chief of staff. Orchestrates the advisory team, manages recurring tasks and templates, and coordinates work across advisors and human experts.",
+        "callable": ["founder", "strategy", "technology", "funding", "finance", "legal", "growth", "qa-judge"],
+        "mcp": ["notion", "slack"],
+        "skills": [],
+    },
 ]
 
 

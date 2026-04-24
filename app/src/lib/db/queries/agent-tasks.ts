@@ -8,7 +8,7 @@ export async function createAgentTask(data: {
   userId: string;
   projectId: string;
   conversationId: string;
-  taskType: 'coaching_followup' | 'reminder' | 'deadline' | 'check_in';
+  taskType: 'coaching_followup' | 'reminder' | 'deadline' | 'check_in' | 'status_report_collection' | 'ea_briefing';
   coachKey: string;
   triggerAt: Date;
   repeatInterval: string | null;

@@ -8,7 +8,8 @@ export type CoachIconName =
   | "BarChart3"
   | "Scale"
   | "TrendingUp"
-  | "Link";
+  | "Link"
+  | "Brain";
 
 export interface CoachConfig {
   key: string;
@@ -76,6 +77,13 @@ export const COACH_META: CoachMeta[] = [
     description: "GTM, sales, marketing, retention",
     icon: "TrendingUp",
     keywords: ["growth", "marketing", "sales", "gtm", "acquisition", "retention", "churn", "conversion", "funnel", "pricing", "launch", "customer", "brand"],
+  },
+  {
+    key: "ea",
+    name: "Chief of Staff",
+    description: "Executive assistant, task management, advisor orchestration",
+    icon: "Brain",
+    keywords: ["plan my day", "follow up", "status report", "task", "schedule", "meeting", "recap", "coordinate", "manage", "organize", "reminder", "brief", "orchestrate", "what's on my plate", "action items", "1:1", "daily plan"],
   },
 ];
 

@@ -1,9 +1,10 @@
 export interface ParsedTask {
-  type: 'coaching_followup' | 'reminder' | 'deadline' | 'check_in';
+  type: 'coaching_followup' | 'reminder' | 'deadline' | 'check_in' | 'status_report_collection' | 'ea_briefing';
   title: string;
   triggerAt: Date;
   triggerDescription: string;
   repeatInterval: string | null;
+  contextKey: string | null;
 }
 
 const TASK_REGEX = /:::task\n([\s\S]*?):::/g;
@@ -40,7 +41,7 @@ function parseTrigger(trigger: string): { triggerAt: Date; description: string }
   };
 }
 
-const VALID_TYPES = ['coaching_followup', 'reminder', 'deadline', 'check_in'] as const;
+const VALID_TYPES = ['coaching_followup', 'reminder', 'deadline', 'check_in', 'status_report_collection', 'ea_briefing'] as const;
 
 export function parseTaskBlocks(content: string): ParsedTask[] {
   const results: ParsedTask[] = [];
@@ -54,6 +55,7 @@ export function parseTaskBlocks(content: string): ParsedTask[] {
     let title = '';
     let trigger = '1d';
     let repeat: string | null = null;
+    let contextKey: string | null = null;
 
     for (const line of lines) {
       if (line.startsWith('type:')) {
@@ -65,6 +67,8 @@ export function parseTaskBlocks(content: string): ParsedTask[] {
         trigger = line.slice(8).trim();
       } else if (line.startsWith('repeat:')) {
         repeat = line.slice(7).trim();
+      } else if (line.startsWith('context_key:')) {
+        contextKey = line.slice(12).trim();
       }
     }
 
@@ -76,6 +80,7 @@ export function parseTaskBlocks(content: string): ParsedTask[] {
         triggerAt,
         triggerDescription: description,
         repeatInterval: repeat,
+        contextKey,
       });
     }
   }

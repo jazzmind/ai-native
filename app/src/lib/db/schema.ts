@@ -136,7 +136,7 @@ export const agentTasks = pgTable('agent_tasks', {
   userId: text('user_id').notNull(),
   projectId: text('project_id').notNull(),
   conversationId: text('conversation_id'),
-  taskType: text('task_type', { enum: ['coaching_followup', 'reminder', 'deadline', 'check_in'] }).notNull(),
+  taskType: text('task_type', { enum: ['coaching_followup', 'reminder', 'deadline', 'check_in', 'status_report_collection', 'ea_briefing'] }).notNull(),
   coachKey: text('coach_key').notNull(),
   status: text('status', { enum: ['pending', 'triggered', 'completed', 'dismissed'] }).notNull().default('pending'),
   triggerAt: timestamp('trigger_at').notNull(),
@@ -146,6 +146,27 @@ export const agentTasks = pgTable('agent_tasks', {
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
+
+// ══════════════════════════════════════════════
+// EA Memory (Chief of Staff persistent memory)
+// ══════════════════════════════════════════════
+
+export const eaMemory = pgTable('ea_memory', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  projectId: text('project_id').notNull(),
+  memoryType: text('memory_type', { enum: ['template', 'recurring_task', 'contact', 'preference', 'context'] }).notNull(),
+  key: text('key').notNull(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  metadata: jsonb('metadata'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (t) => ({
+  uniq: unique().on(t.userId, t.projectId, t.key),
+}));
 
 // ══════════════════════════════════════════════
 // Notifications

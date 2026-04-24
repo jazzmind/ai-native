@@ -74,6 +74,7 @@ Default to "advise" if unclear.`;
 
 Available advisors:
 ${coachList}
+- ea: Chief of Staff - executive assistant, task management, advisor orchestration, daily planning, recurring workflows, status reports, meeting notes, action items
 
 Respond with ONLY valid JSON (no markdown):
 {"coaches": ["key1", "key2", ...], "lead": "key1", "mode": "advise", "reasoning": "brief explanation"}
@@ -81,6 +82,7 @@ Respond with ONLY valid JSON (no markdown):
 ${modeInstruction}
 
 Coach selection rules:
+- Route to "ea" (and ONLY "ea") for operational/coordination requests: planning the day, open tasks, status reports, meeting notes, action item capture, recurring workflows, "what's on my plate", "follow up on X", "plan my day", template management
 - Pick 2-4 advisors for most business questions since multiple perspectives add value
 - Only pick 1 advisor for very narrow, single-domain questions (e.g. "what's my tax deadline")
 ${modeCoachCountGuidance}
