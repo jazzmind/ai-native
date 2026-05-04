@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users, TrendingUp, BarChart3, Star } from "lucide-react";
+import { Users, TrendingUp, BarChart3, Star, Shield } from "lucide-react";
 
 const ADMIN_LINKS = [
   {
@@ -31,6 +31,13 @@ const ADMIN_LINKS = [
     description: "Approve and manage expert applications",
     icon: Star,
     color: "bg-amber-600",
+  },
+  {
+    href: "/admin/security",
+    label: "Security Scanner",
+    description: "Automated pen-testing: probes + LLM agent",
+    icon: Shield,
+    color: "bg-red-600",
   },
 ];
 
