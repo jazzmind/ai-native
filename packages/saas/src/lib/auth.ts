@@ -139,6 +139,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 });
 
+// Consistent user ID resolution: always prefer email (lowercase), matching the JWT
+// callback which sets token.userId = email || id. This ensures write and read paths
+// use the same ID so conversation ownership checks never fail.
+function resolveUserId(session: { user: { email?: string | null; name?: string | null } & Record<string, unknown> }): string {
+  const email = session.user.email?.toLowerCase().trim();
+  return email || (session.user as any).id || "unknown";
+}
+
 export async function getRequiredUser(): Promise<{ id: string; email: string; name: string }> {
   const session = await auth();
   if (!session?.user) {
@@ -146,7 +154,7 @@ export async function getRequiredUser(): Promise<{ id: string; email: string; na
   }
   const email = session.user.email?.toLowerCase().trim() || "";
   return {
-    id: email || (session.user as any).id || "unknown",
+    id: resolveUserId(session as any),
     email,
     name: session.user.name || "",
   };
@@ -162,8 +170,8 @@ export async function getRequiredUserAndOrg(): Promise<{
   }
 
   const user = {
-    id: (session.user as any).id || session.user.email || "unknown",
-    email: session.user.email || "",
+    id: resolveUserId(session as any),
+    email: session.user.email?.toLowerCase().trim() || "",
     name: session.user.name || "",
   };
 

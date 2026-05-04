@@ -42,6 +42,20 @@ export const orgMemberships = pgTable('org_memberships', {
   uniq: unique().on(t.orgId, t.userId),
 }));
 
+export const orgInvitations = pgTable('org_invitations', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  role: text('role', { enum: ['admin', 'member'] }).notNull().default('member'),
+  invitedBy: text('invited_by').notNull(),
+  token: text('token').notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  acceptedAt: timestamp('accepted_at'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (t) => ({
+  uniqPending: unique().on(t.orgId, t.email),
+}));
+
 // ══════════════════════════════════════════════
 // User API Keys (BYO key storage)
 // ══════════════════════════════════════════════

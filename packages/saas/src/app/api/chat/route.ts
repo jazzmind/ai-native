@@ -17,7 +17,8 @@ import { getActivityProvider } from "@/lib/activity";
 import { getProfileProvider, formatProfileForPrompt } from "@/lib/profile";
 import { getKnowledgeProvider } from "@/lib/knowledge";
 import { extractFromConversation } from "@/lib/auto-extract";
-import { getRequiredUser, getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
+import { getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
+import { resolveAnthropicKey, BYOKeyRequiredError } from "@/lib/api-key-resolver";
 import { getCoachByKey } from "@/lib/coaches-server";
 import type { CoachConfig } from "@/lib/coaches";
 import { type AgentMode, isValidMode } from "@/lib/modes";
@@ -48,11 +49,18 @@ function formatExpertContext(comments: { author_email: string; author_name: stri
 export async function POST(req: NextRequest) {
   let user;
   let orgId = '';
+  let orgPlan: 'free' | 'pro' | 'team' = 'free';
+  let anthropicKey: string;
   try {
     const result = await getRequiredUserAndOrg();
     user = result.user;
     orgId = result.org.id;
+    orgPlan = (result.org.plan as 'free' | 'pro' | 'team') || 'free';
+    anthropicKey = await resolveAnthropicKey(orgId, user.id, orgPlan);
   } catch (err) {
+    if (err instanceof BYOKeyRequiredError) {
+      return Response.json({ error: err.message, code: 'BYO_KEY_REQUIRED' }, { status: 402 });
+    }
     return handleAuthError(err);
   }
 
@@ -246,8 +254,8 @@ export async function POST(req: NextRequest) {
 
         let eaPlanningResponse = "";
         try {
-          const sessionId = await getOrCreateSession(convId!, eaCoach);
-          for await (const event of streamCoachResponse(sessionId, eaPlanningMessage, eaCoach.key)) {
+          const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey);
+          for await (const event of streamCoachResponse(sessionId, eaPlanningMessage, eaCoach.key, anthropicKey)) {
             switch (event.type) {
               case "text":
                 eaPlanningResponse += event.content;
@@ -347,8 +355,8 @@ export async function POST(req: NextRequest) {
 
               let advisorResponse = "";
               try {
-                const sessionId = await getOrCreateSession(convId!, coach);
-                for await (const event of streamCoachResponse(sessionId, advisorMessage, coach.key)) {
+                const sessionId = await getOrCreateSession(convId!, coach, anthropicKey);
+                for await (const event of streamCoachResponse(sessionId, advisorMessage, coach.key, anthropicKey)) {
                   switch (event.type) {
                     case "text":
                       advisorResponse += event.content;
@@ -403,8 +411,8 @@ export async function POST(req: NextRequest) {
 
               let eaSynthesis = "";
               try {
-                const sessionId = await getOrCreateSession(convId!, eaCoach);
-                for await (const event of streamCoachResponse(sessionId, synthesisQuestion, eaCoach.key)) {
+                const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey);
+                for await (const event of streamCoachResponse(sessionId, synthesisQuestion, eaCoach.key, anthropicKey)) {
                   switch (event.type) {
                     case "text":
                       eaSynthesis += event.content;
@@ -455,9 +463,9 @@ export async function POST(req: NextRequest) {
 
           let fullResponse = "";
           try {
-            const sessionId = await getOrCreateSession(convId!, coach);
+            const sessionId = await getOrCreateSession(convId!, coach, anthropicKey);
 
-            for await (const event of streamCoachResponse(sessionId, contextualMessage, coach.key)) {
+            for await (const event of streamCoachResponse(sessionId, contextualMessage, coach.key, anthropicKey)) {
               switch (event.type) {
                 case "text":
                   fullResponse += event.content;
@@ -510,7 +518,7 @@ export async function POST(req: NextRequest) {
           send({ type: "synthesis_start", leadKey: leadCoach.key, leadName: leadCoach.name });
 
           try {
-            const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+            const client = new Anthropic({ apiKey: anthropicKey });
 
             const coachResponseText = coaches
               .map((c) => {

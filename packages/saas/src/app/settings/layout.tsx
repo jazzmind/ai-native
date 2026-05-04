@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Key, Shield, CreditCard, Rocket, User, Cpu } from "lucide-react";
+import { Key, Shield, CreditCard, Rocket, User, Cpu, Users } from "lucide-react";
 
 const SETTINGS_TABS = [
   { href: "/settings/profile", label: "Profile", Icon: User },
   { href: "/settings/api-keys", label: "API Key", Icon: Key },
+  { href: "/settings/team", label: "Team", Icon: Users },
   { href: "/settings/deploy", label: "Deploy Agents", Icon: Rocket },
   { href: "/settings/models", label: "Models", Icon: Cpu },
   { href: "/settings/tools", label: "Tools", Icon: Shield },

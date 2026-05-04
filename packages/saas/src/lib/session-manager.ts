@@ -3,19 +3,14 @@ import { getEnvironmentId } from "./coaches-server";
 import type { CoachConfig } from "./coaches";
 import { getCoachSession, setCoachSession } from "./db";
 
-let _client: Anthropic | null = null;
-
-function getClient(): Anthropic {
-  if (!_client) {
-    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  }
-  return _client;
+function makeClient(apiKey: string): Anthropic {
+  return new Anthropic({ apiKey });
 }
 
 export async function getOrCreateSession(
   conversationId: string,
   coach: CoachConfig,
-  apiKey?: string
+  apiKey: string
 ): Promise<string> {
   const existing = await getCoachSession(conversationId, coach.key);
   if (existing) {
@@ -28,7 +23,7 @@ export async function getOrCreateSession(
     );
   }
 
-  const client = apiKey ? new Anthropic({ apiKey }) : getClient();
+  const client = makeClient(apiKey);
   const session = await client.beta.sessions.create({
     agent: coach.agentId,
     environment_id: getEnvironmentId(),
@@ -36,6 +31,10 @@ export async function getOrCreateSession(
 
   await setCoachSession(conversationId, coach.key, session.id);
   return session.id;
+}
+
+export function makeAnthropicClient(apiKey: string): Anthropic {
+  return makeClient(apiKey);
 }
 
 export interface StreamEvent {
@@ -55,9 +54,10 @@ export interface StreamEvent {
 export async function* streamCoachResponse(
   sessionId: string,
   message: string,
-  coachKey: string
+  coachKey: string,
+  apiKey: string
 ): AsyncGenerator<StreamEvent> {
-  const client = getClient();
+  const client = makeClient(apiKey);
 
   const stream = await (client.beta.sessions.events as any).stream(sessionId);
 

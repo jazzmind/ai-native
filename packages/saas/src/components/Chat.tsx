@@ -208,6 +208,7 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
 
   // File upload state
   const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -220,20 +221,34 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
+      setLoadError(null);
       return;
     }
+    setLoadError(null);
     fetch(`/api/conversations?id=${conversationId}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error || `Failed to load conversation (${r.status})`);
+        }
+        return r.json();
+      })
       .then((data) => {
         if (data.messages) {
           const activityByCoach: Record<string, ActivityItem[]> = {};
           if (data.activity) {
             for (const a of data.activity) {
               if (!activityByCoach[a.coach_key]) activityByCoach[a.coach_key] = [];
+              let parsedData: Record<string, unknown> = {};
+              try {
+                parsedData = JSON.parse(a.event_data || "{}");
+              } catch {
+                // malformed activity row — skip data, keep entry
+              }
               activityByCoach[a.coach_key].push({
                 coachKey: a.coach_key,
                 eventType: a.event_type,
-                data: JSON.parse(a.event_data || "{}"),
+                data: parsedData,
                 timestamp: new Date(a.created_at).getTime(),
               });
             }
@@ -287,7 +302,9 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
           setMessages(msgs);
         }
       })
-      .catch(() => {});
+      .catch((err: Error) => {
+        setLoadError(err.message || "Failed to load conversation");
+      });
   }, [conversationId]);
 
   useEffect(() => {
@@ -652,7 +669,13 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
-        {messages.length === 0 && !streamingTurn && (
+        {loadError && (
+          <div className="flex items-center gap-2 p-4 mb-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm">
+            <span>⚠</span>
+            <span>{loadError}</span>
+          </div>
+        )}
+        {messages.length === 0 && !streamingTurn && !loadError && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <h2 className="text-2xl font-semibold mb-2">Executive Team</h2>
             <p className="text-[var(--text-muted)] max-w-md mb-6">

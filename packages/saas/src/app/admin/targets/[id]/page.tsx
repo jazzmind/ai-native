@@ -150,7 +150,7 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text)]">{target.name}</h1>
-          <p className="text-sm text-[var(--text-muted)]">{target.type === "cma" ? "Claude Managed Agents" : "Busibox"}</p>
+          <p className="text-sm text-[var(--text-muted)]">Claude Managed Agents</p>
         </div>
         <div className="flex gap-2">
           <button onClick={checkStatus} disabled={checking}
@@ -196,9 +196,7 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
               <Key size={14} className="text-[var(--text-muted)]" />
               <div>
                 <div className="text-sm font-semibold text-[var(--text)]">API Key</div>
-                <div className="text-[10px] text-[var(--text-muted)]">
-                  {target.type === "cma" ? "Anthropic API key" : "Busibox API key"}
-                </div>
+                <div className="text-[10px] text-[var(--text-muted)]">Anthropic API key</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -257,17 +255,6 @@ export default function TargetDetail({ params }: { params: Promise<{ id: string 
               )}
             </div>
           </div>
-          {target.type === "busibox" && (
-            <div className="flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] rounded-lg">
-              <div>
-                <div className="text-sm font-semibold text-[var(--text)]">Host URL</div>
-                <div className="text-[10px] text-[var(--text-muted)]">Busibox instance URL</div>
-              </div>
-              <span className="text-xs font-mono text-[var(--text-muted)]">
-                {target.config?.host || "Not set"}
-              </span>
-            </div>
-          )}
         </div>
       </div>
 

@@ -1,7 +1,7 @@
-import { eq, and, desc, count, gte, sql } from 'drizzle-orm';
+import { eq, and, desc, count, gte, isNull } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../client';
-import { organizations, orgMemberships, conversations, messages, userApiKeys } from '../schema';
+import { organizations, orgMemberships, orgInvitations, conversations, messages, userApiKeys } from '../schema';
 
 export interface Organization {
   id: string;
@@ -159,6 +159,91 @@ export async function addOrgMember(orgId: string, userId: string, role: 'owner' 
   const db = getDb();
   const id = uuidv4();
   await db.insert(orgMemberships).values({ id, orgId, userId, role });
+}
+
+export async function removeOrgMember(orgId: string, userId: string) {
+  const db = getDb();
+  await db.delete(orgMemberships)
+    .where(and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, userId)));
+}
+
+// ── Invitation helpers ─────────────────────────────────────────────────────
+
+export interface OrgInvitation {
+  id: string;
+  orgId: string;
+  email: string;
+  role: 'admin' | 'member';
+  invitedBy: string;
+  token: string;
+  expiresAt: Date;
+  acceptedAt: Date | null;
+  createdAt: Date | null;
+}
+
+export async function createInvitation(
+  orgId: string,
+  email: string,
+  role: 'admin' | 'member',
+  invitedBy: string,
+): Promise<OrgInvitation> {
+  const db = getDb();
+  const id = uuidv4();
+  const token = uuidv4() + '-' + uuidv4(); // extra entropy
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  // Upsert: if there's an existing pending invitation for this email+org, replace it
+  await db.delete(orgInvitations)
+    .where(and(eq(orgInvitations.orgId, orgId), eq(orgInvitations.email, email.toLowerCase())));
+
+  await db.insert(orgInvitations).values({
+    id,
+    orgId,
+    email: email.toLowerCase(),
+    role,
+    invitedBy,
+    token,
+    expiresAt,
+  });
+
+  const [inv] = await db.select().from(orgInvitations).where(eq(orgInvitations.id, id));
+  return inv as OrgInvitation;
+}
+
+export async function getInvitationByToken(token: string): Promise<OrgInvitation | undefined> {
+  const db = getDb();
+  const [inv] = await db.select().from(orgInvitations).where(eq(orgInvitations.token, token));
+  return inv as OrgInvitation | undefined;
+}
+
+export async function acceptInvitation(token: string, userId: string): Promise<{ orgId: string; role: 'admin' | 'member' } | null> {
+  const db = getDb();
+  const inv = await getInvitationByToken(token);
+  if (!inv || inv.acceptedAt || inv.expiresAt < new Date()) return null;
+
+  await addOrgMember(inv.orgId, userId, inv.role);
+  await db.update(orgInvitations)
+    .set({ acceptedAt: new Date() })
+    .where(eq(orgInvitations.id, inv.id));
+
+  return { orgId: inv.orgId, role: inv.role };
+}
+
+export async function listPendingInvitations(orgId: string): Promise<OrgInvitation[]> {
+  const db = getDb();
+  const now = new Date();
+  const rows = await db.select().from(orgInvitations)
+    .where(and(
+      eq(orgInvitations.orgId, orgId),
+      isNull(orgInvitations.acceptedAt),
+    ));
+  return rows.filter(r => r.expiresAt > now) as OrgInvitation[];
+}
+
+export async function revokeInvitation(id: string, orgId: string): Promise<void> {
+  const db = getDb();
+  await db.delete(orgInvitations)
+    .where(and(eq(orgInvitations.id, id), eq(orgInvitations.orgId, orgId)));
 }
 
 export async function listAllOrganizations() {

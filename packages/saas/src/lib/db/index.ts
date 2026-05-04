@@ -15,7 +15,14 @@ export {
   getMessageCount,
   listOrganizationMembers,
   addOrgMember,
+  removeOrgMember,
+  createInvitation,
+  getInvitationByToken,
+  acceptInvitation,
+  listPendingInvitations,
+  revokeInvitation,
   type Organization,
+  type OrgInvitation,
 } from './queries/organizations';
 
 // Projects
