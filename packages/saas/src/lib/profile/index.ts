@@ -1,28 +1,15 @@
-import type { ProfileProvider } from "./profile-provider";
-import { StandaloneProfileProvider } from "./standalone-profile-provider";
-import { BusiboxProfileProvider } from "./busibox-profile-provider";
-import { listTargets } from "@/lib/config-store";
+import { PostgresProfileProvider } from "./postgres-profile-provider";
 
-let _provider: ProfileProvider | null = null;
+export type { ProfileProvider, ProfileEntry } from "./profile-provider";
+export { formatProfileForPrompt } from "./profile-provider";
 
-export function getProfileProvider(): ProfileProvider {
-  if (_provider) return _provider;
+// SaaS always uses Postgres/Neon — no Busibox-target detection needed.
+const _provider = new PostgresProfileProvider();
 
-  const targets = listTargets();
-  const busiboxTarget = targets.find(t => t.type === "busibox" && t.status === "deployed");
-
-  if (busiboxTarget && busiboxTarget.config.hostUrl && busiboxTarget.config.apiKey) {
-    _provider = new BusiboxProfileProvider(busiboxTarget.config.hostUrl, busiboxTarget.config.apiKey);
-  } else {
-    _provider = new StandaloneProfileProvider();
-  }
-
+export function getProfileProvider() {
   return _provider;
 }
 
 export function resetProfileProvider(): void {
-  _provider = null;
+  // No-op — singleton Postgres provider needs no reset.
 }
-
-export type { ProfileProvider, ProfileEntry } from "./profile-provider";
-export { formatProfileForPrompt } from "./profile-provider";

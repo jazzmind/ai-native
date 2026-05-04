@@ -21,14 +21,14 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     <div className="h-full flex flex-col">
       <div className="border-b border-[var(--border)] px-6 pt-6 pb-0 bg-[var(--bg)]">
         <h1 className="text-lg font-bold text-[var(--text)] mb-4">Settings</h1>
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto scrollbar-none">
           {SETTINGS_TABS.map(({ href, label, Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors -mb-px ${
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors -mb-px whitespace-nowrap flex-shrink-0 ${
                   active
                     ? "border-[var(--accent)] text-[var(--accent)]"
                     : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]"

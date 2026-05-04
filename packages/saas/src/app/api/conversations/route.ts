@@ -15,8 +15,13 @@ export async function GET(req: NextRequest) {
         return Response.json({ error: "Not found" }, { status: 404 });
       }
       const messages = await getMessages(id);
-      const activityProvider = getActivityProvider();
-      const activity = await activityProvider.listByConversation(user.id, id);
+      let activity: Awaited<ReturnType<ReturnType<typeof getActivityProvider>['listByConversation']>> = [];
+      try {
+        const activityProvider = getActivityProvider();
+        activity = await activityProvider.listByConversation(user.id, id);
+      } catch {
+        // activity is supplemental — never block conversation loading
+      }
       const expertComments = await getExpertComments(id);
       return Response.json({ conversation, messages, activity, expertComments });
     }

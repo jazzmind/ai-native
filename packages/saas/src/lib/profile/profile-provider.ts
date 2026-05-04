@@ -11,7 +11,7 @@ export interface ProfileEntry {
 export interface ProfileProvider {
   readonly type: string;
 
-  upsert(userId: string, category: string, key: string, value: string, sourceConversation?: string): Promise<void>;
+  upsert(userId: string, category: string, key: string, value: string, sourceConversation?: string, orgId?: string): Promise<void>;
 
   list(userId: string, category?: string): Promise<ProfileEntry[]>;
 

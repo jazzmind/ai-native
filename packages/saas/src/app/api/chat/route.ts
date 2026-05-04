@@ -110,8 +110,7 @@ export async function POST(req: NextRequest) {
   let activeMode: AgentMode;
 
   if (coachKeys && coachKeys.length > 0) {
-    const resolved = coachKeys
-      .map((k) => getCoachByKey(k))
+    const resolved = (await Promise.all(coachKeys.map((k) => getCoachByKey(k))))
       .filter(Boolean) as CoachConfig[];
     if (resolved.length === 0) {
       return Response.json({ error: "No valid coaches found" }, { status: 400 });
@@ -263,7 +262,7 @@ export async function POST(req: NextRequest) {
                 break;
               case "tool_use":
                 send({ type: "tool_use", tool: event.content, coachKey: "ea" });
-                activityProvider.add(user.id, convId!, "ea", "tool_use", { tool: event.content, input: event.toolInput });
+                activityProvider.add(user.id, convId!, "ea", "tool_use", { tool: event.content, input: event.toolInput }, orgId);
                 break;
               case "tool_result":
                 send({ type: "tool_result", content: event.content, coachKey: "ea", toolName: event.toolName });
@@ -273,7 +272,7 @@ export async function POST(req: NextRequest) {
                 break;
               case "usage":
                 send({ type: "usage", coachKey: "ea", usage: event.usage });
-                activityProvider.add(user.id, convId!, "ea", "usage", event.usage as Record<string, unknown>);
+                activityProvider.add(user.id, convId!, "ea", "usage", event.usage as Record<string, unknown>, orgId);
                 break;
               case "context_compacted":
                 send({ type: "context_compacted", coachKey: "ea" });
@@ -331,7 +330,7 @@ export async function POST(req: NextRequest) {
 
           const dispatchedCoaches: CoachConfig[] = [];
           for (const key of dispatchMap.keys()) {
-            const coach = getCoachByKey(key);
+            const coach = await getCoachByKey(key);
             if (coach) dispatchedCoaches.push(coach);
           }
 
@@ -364,7 +363,7 @@ export async function POST(req: NextRequest) {
                       break;
                     case "tool_use":
                       send({ type: "tool_use", tool: event.content, coachKey: coach.key });
-                      activityProvider.add(user.id, convId!, coach.key, "tool_use", { tool: event.content, input: event.toolInput });
+                      activityProvider.add(user.id, convId!, coach.key, "tool_use", { tool: event.content, input: event.toolInput }, orgId);
                       break;
                     case "tool_result":
                       send({ type: "tool_result", content: event.content, coachKey: coach.key, toolName: event.toolName });
@@ -374,7 +373,7 @@ export async function POST(req: NextRequest) {
                       break;
                     case "usage":
                       send({ type: "usage", coachKey: coach.key, usage: event.usage });
-                      activityProvider.add(user.id, convId!, coach.key, "usage", event.usage as Record<string, unknown>);
+                      activityProvider.add(user.id, convId!, coach.key, "usage", event.usage as Record<string, unknown>, orgId);
                       break;
                     case "error":
                       send({ type: "error", content: event.content, coachKey: coach.key });
@@ -473,22 +472,22 @@ export async function POST(req: NextRequest) {
                   break;
                 case "tool_use":
                   send({ type: "tool_use", tool: event.content, coachKey: coach.key });
-                  activityProvider.add(user.id, convId!, coach.key, "tool_use", { tool: event.content, input: event.toolInput });
+                  activityProvider.add(user.id, convId!, coach.key, "tool_use", { tool: event.content, input: event.toolInput }, orgId);
                   break;
                 case "tool_result":
                   send({ type: "tool_result", content: event.content, coachKey: coach.key, toolName: event.toolName });
-                  activityProvider.add(user.id, convId!, coach.key, "tool_result", { tool: event.toolName, result: event.content });
+                  activityProvider.add(user.id, convId!, coach.key, "tool_result", { tool: event.toolName, result: event.content }, orgId);
                   break;
                 case "thinking":
                   send({ type: "thinking", coachKey: coach.key });
                   break;
                 case "usage":
                   send({ type: "usage", coachKey: coach.key, usage: event.usage });
-                  activityProvider.add(user.id, convId!, coach.key, "usage", event.usage as Record<string, unknown>);
+                  activityProvider.add(user.id, convId!, coach.key, "usage", event.usage as Record<string, unknown>, orgId);
                   break;
                 case "context_compacted":
                   send({ type: "context_compacted", coachKey: coach.key });
-                  activityProvider.add(user.id, convId!, coach.key, "context_compacted", {});
+                  activityProvider.add(user.id, convId!, coach.key, "context_compacted", {}, orgId);
                   break;
                 case "error":
                   send({ type: "error", content: event.content, coachKey: coach.key });
@@ -591,7 +590,8 @@ export async function POST(req: NextRequest) {
             null,
             user.id,
             projectId,
-            convId!
+            convId!,
+            orgId
           );
 
           send({

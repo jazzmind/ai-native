@@ -18,18 +18,18 @@ export async function POST(
   }
 
   const { id } = await params;
-  const target = getTarget(id, user.id);
+  const target = await getTarget(id, user.id);
   if (!target) return Response.json({ error: "Target not found" }, { status: 404 });
 
   const adapter = getAdapter(target.type);
   if (!adapter) return Response.json({ error: `Unknown adapter type: ${target.type}` }, { status: 400 });
 
-  updateTargetStatus(id, "deploying");
+  await updateTargetStatus(id, "deploying");
 
   try {
     const coaches = loadCoachDefinitions();
     if (coaches.length === 0) {
-      updateTargetStatus(id, "error");
+      await updateTargetStatus(id, "error");
       return Response.json({ ok: false, error: "No coach definitions found. Check that INSTRUCTIONS.md files exist." }, { status: 500 });
     }
 
@@ -63,16 +63,16 @@ export async function POST(
     if (result.environmentId) agentState.environment_id = result.environmentId;
 
     if (result.success) {
-      updateTargetStatus(id, "deployed", agentState);
+      await updateTargetStatus(id, "deployed", agentState);
       resetDeployState();
       return Response.json({ ok: true, result });
     } else {
-      updateTargetStatus(id, "error", agentState);
+      await updateTargetStatus(id, "error", agentState);
       resetDeployState();
       return Response.json({ ok: false, error: result.error, result }, { status: 500 });
     }
   } catch (e: any) {
-    updateTargetStatus(id, "error");
+    await updateTargetStatus(id, "error");
     return Response.json({ ok: false, error: e.message }, { status: 500 });
   }
 }

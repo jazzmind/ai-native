@@ -8,8 +8,14 @@ import {
   jsonb,
   unique,
   serial,
+  customType,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+
+// tsvector custom type for Postgres full-text search
+const tsvector = customType<{ data: string }>({
+  dataType() { return 'tsvector'; },
+});
 
 // ══════════════════════════════════════════════
 // Organizations & Memberships
@@ -457,6 +463,102 @@ export const appSettings = pgTable('app_settings', {
   value: jsonb('value').notNull(),
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (t) => [unique().on(t.orgId, t.key)]);
+
+// ══════════════════════════════════════════════
+// Deploy Targets (migrated from SQLite config-store)
+// ══════════════════════════════════════════════
+
+export const deployTargets = pgTable('deploy_targets', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  // CMA-only for SaaS; 'busibox' kept in type for future Electron path
+  type: text('type', { enum: ['cma', 'busibox'] }).notNull().default('cma'),
+  name: text('name').notNull(),
+  // configJson holds encrypted API key as { _encrypted_api_key: '...' }
+  configJson: jsonb('config_json').notNull().default({}),
+  status: text('status', { enum: ['unconfigured', 'configured', 'deploying', 'deployed', 'error'] }).notNull().default('unconfigured'),
+  lastDeployedAt: timestamp('last_deployed_at'),
+  // agentState: { agents: { [key]: { id, version, name } }, environment_id: string }
+  agentState: jsonb('agent_state').notNull().default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const mcpConnections = pgTable('mcp_connections', {
+  id: text('id').primaryKey(),
+  targetId: text('target_id').notNull().references(() => deployTargets.id, { onDelete: 'cascade' }),
+  mcpName: text('mcp_name').notNull(),
+  status: text('status', { enum: ['disconnected', 'connected', 'error'] }).notNull().default('disconnected'),
+  vaultId: text('vault_id'),
+  connectionId: text('connection_id'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (t) => ({
+  uniq: unique().on(t.targetId, t.mcpName),
+}));
+
+// ══════════════════════════════════════════════
+// User Profile Entries (migrated from SQLite standalone-profile-provider)
+// ══════════════════════════════════════════════
+
+export const userProfileEntries = pgTable('user_profile_entries', {
+  id: serial('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  category: text('category').notNull(),
+  key: text('key').notNull(),
+  value: text('value').notNull(),
+  sourceConversation: text('source_conversation'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (t) => ({
+  uniq: unique().on(t.userId, t.category, t.key),
+}));
+
+// ══════════════════════════════════════════════
+// Agent Activity Log (migrated from SQLite standalone-activity-provider)
+// ══════════════════════════════════════════════
+
+export const agentActivity = pgTable('agent_activity', {
+  id: serial('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  conversationId: text('conversation_id').notNull(),
+  coachKey: text('coach_key').notNull(),
+  eventType: text('event_type').notNull(),
+  eventData: jsonb('event_data').notNull().default({}),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// ══════════════════════════════════════════════
+// Knowledge Base (migrated from SQLite standalone-provider + FTS5)
+// ══════════════════════════════════════════════
+
+export const knowledgeCollections = pgTable('knowledge_collections', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  projectId: text('project_id'),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const knowledgeDocuments = pgTable('knowledge_documents', {
+  id: text('id').primaryKey(),
+  collectionId: text('collection_id').notNull().references(() => knowledgeCollections.id, { onDelete: 'cascade' }),
+  orgId: text('org_id').notNull(),
+  userId: text('user_id').notNull(),
+  projectId: text('project_id'),
+  title: text('title').notNull().default(''),
+  content: text('content').notNull(),
+  source: text('source').notNull().default(''),
+  metadata: jsonb('metadata').notNull().default({}),
+  // tsv is maintained by a DB trigger set up in the push migration
+  tsv: tsvector('tsv'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
 
 // ══════════════════════════════════════════════
 // Relations

@@ -14,7 +14,9 @@
     "electron:pack": "next build && electron-builder --dir",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:push": "drizzle-kit push --force",
+    "db:studio": "drizzle-kit studio",
+    "build:deploy": "drizzle-kit push --force && next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
@@ -23,7 +25,6 @@
     "@stripe/stripe-js": "^9.1.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.3.3",
-    "better-sqlite3": "^12.8.0",
     "docx": "^9.6.1",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.8.0",
@@ -51,7 +52,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
     "drizzle-kit": "^0.31.10",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

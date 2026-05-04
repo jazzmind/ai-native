@@ -1,27 +1,14 @@
-import type { ActivityProvider } from "./activity-provider";
-import { StandaloneActivityProvider } from "./standalone-activity-provider";
-import { BusiboxActivityProvider } from "./busibox-activity-provider";
-import { listTargets } from "@/lib/config-store";
+import { PostgresActivityProvider } from "./postgres-activity-provider";
 
-let _provider: ActivityProvider | null = null;
+export type { ActivityProvider, ActivityEntry } from "./activity-provider";
 
-export function getActivityProvider(): ActivityProvider {
-  if (_provider) return _provider;
+// SaaS always uses Postgres/Neon — no Busibox-target detection needed.
+const _provider = new PostgresActivityProvider();
 
-  const targets = listTargets();
-  const busiboxTarget = targets.find(t => t.type === "busibox" && t.status === "deployed");
-
-  if (busiboxTarget && busiboxTarget.config.hostUrl && busiboxTarget.config.apiKey) {
-    _provider = new BusiboxActivityProvider(busiboxTarget.config.hostUrl, busiboxTarget.config.apiKey);
-  } else {
-    _provider = new StandaloneActivityProvider();
-  }
-
+export function getActivityProvider() {
   return _provider;
 }
 
 export function resetActivityProvider(): void {
-  _provider = null;
+  // No-op — singleton Postgres provider needs no reset.
 }
-
-export type { ActivityProvider, ActivityEntry } from "./activity-provider";

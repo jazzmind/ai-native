@@ -21,12 +21,12 @@ export interface RoutingDecision {
   mode: AgentMode;
 }
 
-function extractExplicitMention(message: string): CoachConfig | null {
+async function extractExplicitMention(message: string): Promise<CoachConfig | null> {
   const lower = message.toLowerCase();
   const atMatch = lower.match(/@(\w+)/);
   if (atMatch) {
     const mention = atMatch[1];
-    return getCoachByKey(mention) || null;
+    return (await getCoachByKey(mention)) || null;
   }
   return null;
 }
@@ -35,7 +35,7 @@ export async function routeMessage(
   message: string,
   explicitMode?: AgentMode
 ): Promise<RoutingDecision> {
-  const explicit = extractExplicitMention(message);
+  const explicit = await extractExplicitMention(message);
   if (explicit) {
     return {
       coaches: [explicit],
@@ -96,12 +96,13 @@ ${modeCoachCountGuidance}
     const text =
       response.content[0].type === "text" ? response.content[0].text : "";
     const parsed = JSON.parse(text);
-    const coaches = (parsed.coaches as string[])
-      .map((key: string) => getCoachByKey(key))
-      .filter(Boolean) as CoachConfig[];
+    const coaches = (await Promise.all(
+      (parsed.coaches as string[]).map((key: string) => getCoachByKey(key))
+    )).filter(Boolean) as CoachConfig[];
 
     if (coaches.length === 0) {
-      const fallback = getCoachByKey("ea") || getAllCoaches()[0];
+      const allCoaches = await getAllCoaches();
+      const fallback = (await getCoachByKey("ea")) || allCoaches[0];
       return {
         coaches: [fallback],
         reasoning: "Fallback to Chief of Staff",
@@ -121,7 +122,8 @@ ${modeCoachCountGuidance}
       mode: explicitMode || detectedMode,
     };
   } catch {
-    const fallback = getCoachByKey("ea") || getAllCoaches()[0];
+    const allCoaches = await getAllCoaches();
+    const fallback = (await getCoachByKey("ea")) || allCoaches[0];
     return {
       coaches: [fallback],
       reasoning: "Router parse error, defaulting to Chief of Staff",

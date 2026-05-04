@@ -14,9 +14,8 @@ interface DeployState {
   environment_id: string;
 }
 
-function loadDeployState(): DeployState | null {
+async function loadDeployState(): Promise<DeployState | null> {
   // Try .deploy-state.json first (CLI deployment via deploy.py).
-  // This file only changes on deploy.py runs so a hit here is always fresh.
   const statePath = path.resolve(process.cwd(), "..", ".deploy-state.json");
   try {
     const raw = fs.readFileSync(statePath, "utf-8");
@@ -25,12 +24,9 @@ function loadDeployState(): DeployState | null {
     // Fall through to database
   }
 
-  // Always read from DB — no module-level cache so post-deploy state is
-  // always visible without requiring a process restart or resetDeployState().
+  // Read from Neon — always fresh, no module-level cache.
   try {
-    const targets = listTargets();
-    // Use the NEWEST deployed target (sort descending by updatedAt) so that
-    // re-deployments from the UI take precedence over stale older targets.
+    const targets = await listTargets();
     const deployedCandidates = targets
       .filter((t) => t.status === "deployed" && t.agentState?.agents && Object.keys(t.agentState.agents).length > 0)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -49,43 +45,43 @@ function loadDeployState(): DeployState | null {
 }
 
 export function resetDeployState(): void {
-  // No-op — state is now always read fresh from DB on each call.
+  // No-op — state is always read fresh from Neon on each call.
 }
 
-export function getAgentId(key: string): string {
-  const state = loadDeployState();
+export async function getAgentId(key: string): Promise<string> {
+  const state = await loadDeployState();
   if (!state) return "";
   const entry = state.agents[key];
   if (!entry) return "";
   return entry.id;
 }
 
-export function getEnvironmentId(): string {
-  return loadDeployState()?.environment_id ?? "";
+export async function getEnvironmentId(): Promise<string> {
+  return (await loadDeployState())?.environment_id ?? "";
 }
 
-export function getCoachConfig(meta: CoachMeta): CoachConfig {
+export async function getCoachConfig(meta: CoachMeta): Promise<CoachConfig> {
   return {
     ...meta,
-    agentId: getAgentId(meta.key),
+    agentId: await getAgentId(meta.key),
   };
 }
 
-export function getCoachByKey(key: string): CoachConfig | undefined {
+export async function getCoachByKey(key: string): Promise<CoachConfig | undefined> {
   const meta = COACH_META.find((c) => c.key === key);
   if (!meta) return undefined;
   return getCoachConfig(meta);
 }
 
-export function getAllCoaches(): CoachConfig[] {
-  return COACH_META.map((m) => getCoachConfig(m));
+export async function getAllCoaches(): Promise<CoachConfig[]> {
+  return Promise.all(COACH_META.map((m) => getCoachConfig(m)));
 }
 
-export function getQAJudgeConfig(): CoachConfig {
+export async function getQAJudgeConfig(): Promise<CoachConfig> {
   return {
     key: "qa-judge",
     name: "QA Judge",
-    agentId: getAgentId("qa-judge"),
+    agentId: await getAgentId("qa-judge"),
     description: "Research quality evaluator",
     icon: "Target" as CoachIconName,
     keywords: [],

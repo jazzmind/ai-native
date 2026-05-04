@@ -26,7 +26,7 @@ export async function getOrCreateSession(
   const client = makeClient(apiKey);
   const session = await client.beta.sessions.create({
     agent: coach.agentId,
-    environment_id: getEnvironmentId(),
+    environment_id: await getEnvironmentId(),
   });
 
   await setCoachSession(conversationId, coach.key, session.id);

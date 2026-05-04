@@ -81,7 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (trigger === "signIn" && token.userId) {
         try {
-          const { getUserOrganization, createOrganization } = await import("./db");
+          const { getUserOrganization, createOrganization, getUserMembership, addOrgMember, listOrganizationMembers } = await import("./db");
           const { consumePendingProfile } = await import("./pending-profiles");
           const userId = token.userId as string;
           let org = await getUserOrganization(userId);
@@ -93,6 +93,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const slugBase = email.split("@")[0].replace(/[^a-z0-9]/g, "-");
             const slug = `${slugBase}-${Date.now().toString(36)}`;
             org = await createOrganization(orgDisplayName, slug, userId, "free", profile?.companyName || undefined);
+            // createOrganization already inserts an owner membership row
+          } else {
+            // Ensure the user has a membership row. Orgs created before membership
+            // rows were introduced may be missing one.
+            const membership = await getUserMembership(userId, org.id);
+            if (!membership) {
+              await addOrgMember(org.id, userId, 'owner');
+            } else if (membership.role !== 'owner') {
+              // If this user is the sole member, they should be owner.
+              const allMembers = await listOrganizationMembers(org.id);
+              const hasOwner = allMembers.some(m => m.role === 'owner');
+              if (!hasOwner || allMembers.length === 1) {
+                const db = (await import("./db")).getDb();
+                const { orgMemberships } = await import("./db/schema");
+                const { eq, and } = await import("drizzle-orm");
+                await db.update(orgMemberships)
+                  .set({ role: 'owner' })
+                  .where(and(eq(orgMemberships.orgId, org.id), eq(orgMemberships.userId, userId)));
+              }
+            }
           }
 
           token.orgId = org.id;

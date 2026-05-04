@@ -1,28 +1,15 @@
-import type { KnowledgeProvider } from "./knowledge-provider";
-import { BusiboxKnowledgeProvider } from "./busibox-provider";
-import { StandaloneKnowledgeProvider } from "./standalone-provider";
-import { listTargets } from "@/lib/config-store";
+import { PostgresKnowledgeProvider } from "./postgres-knowledge-provider";
 
-let _provider: KnowledgeProvider | null = null;
+export type { KnowledgeProvider, ProviderContext, SearchResult, Collection, DocumentInput, KnowledgeDocument } from "./knowledge-provider";
+export { knowledgeToolPrompt } from "./knowledge-provider";
 
-export function getKnowledgeProvider(): KnowledgeProvider {
-  if (_provider) return _provider;
+// SaaS always uses Postgres/Neon — no Busibox-target detection needed.
+const _provider = new PostgresKnowledgeProvider();
 
-  const targets = listTargets();
-  const busiboxTarget = targets.find(t => t.type === "busibox" && t.status === "deployed");
-
-  if (busiboxTarget && busiboxTarget.config.hostUrl && busiboxTarget.config.apiKey) {
-    _provider = new BusiboxKnowledgeProvider(busiboxTarget.config.hostUrl, busiboxTarget.config.apiKey);
-  } else {
-    _provider = new StandaloneKnowledgeProvider();
-  }
-
+export function getKnowledgeProvider() {
   return _provider;
 }
 
 export function resetKnowledgeProvider(): void {
-  _provider = null;
+  // No-op — singleton Postgres provider needs no reset.
 }
-
-export type { KnowledgeProvider, ProviderContext, SearchResult, Collection, DocumentInput, KnowledgeDocument } from "./knowledge-provider";
-export { knowledgeToolPrompt } from "./knowledge-provider";

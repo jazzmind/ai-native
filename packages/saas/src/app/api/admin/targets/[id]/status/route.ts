@@ -15,7 +15,7 @@ export async function GET(
   }
 
   const { id } = await params;
-  const target = getTarget(id, user.id);
+  const target = await getTarget(id, user.id);
   if (!target) return Response.json({ error: "Target not found" }, { status: 404 });
 
   const adapter = getAdapter(target.type);

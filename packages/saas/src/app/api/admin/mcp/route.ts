@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   const targetId = searchParams.get("targetId");
 
   if (targetId) {
-    const connections = listMcpConnections(targetId);
+    const connections = await listMcpConnections(targetId);
     const result = MCP_SERVERS.map(server => {
       const conn = connections.find(c => c.mcpName === server.name);
       return {
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       status: "connected" as const,
       vaultId: vaultId || null,
     };
-    upsertMcpConnection(conn);
+    await upsertMcpConnection(conn);
     return Response.json({ ok: true, connection: conn });
   }
 
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
       status: "disconnected" as const,
       vaultId: null,
     };
-    upsertMcpConnection(conn);
+    await upsertMcpConnection(conn);
     return Response.json({ ok: true });
   }
 

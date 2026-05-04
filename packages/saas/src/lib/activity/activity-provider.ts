@@ -10,7 +10,7 @@ export interface ActivityEntry {
 export interface ActivityProvider {
   readonly type: string;
 
-  add(userId: string, conversationId: string, coachKey: string, eventType: string, eventData?: Record<string, unknown>): Promise<void>;
+  add(userId: string, conversationId: string, coachKey: string, eventType: string, eventData?: Record<string, unknown>, orgId?: string): Promise<void>;
 
   listByConversation(userId: string, conversationId: string): Promise<ActivityEntry[]>;
 

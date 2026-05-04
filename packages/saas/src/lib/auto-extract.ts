@@ -34,7 +34,8 @@ export async function extractFromConversation(
   synthesisText: string | null,
   userId: string,
   projectId: string,
-  conversationId: string
+  conversationId: string,
+  orgId = "unknown"
 ): Promise<ExtractionResult> {
   const result: ExtractionResult = { facts: [], knowledge: [] };
 
@@ -58,7 +59,7 @@ export async function extractFromConversation(
   const profileProvider = getProfileProvider();
   for (const fact of facts) {
     try {
-      await profileProvider.upsert(userId, fact.category, fact.key, fact.value, conversationId);
+      await profileProvider.upsert(userId, fact.category, fact.key, fact.value, conversationId, orgId);
     } catch {
       // skip individual upsert failures
     }

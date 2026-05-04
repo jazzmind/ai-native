@@ -1,65 +1,10 @@
-import Database from "better-sqlite3";
-import path from "path";
 import crypto from "crypto";
+import { eq, and, desc } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
+import { getDb } from "./db/client";
+import { deployTargets, mcpConnections, appSettings, organizations } from "./db/schema";
 
-const DB_PATH = path.join(process.cwd(), "coach-router.db");
-
-let _db: Database.Database | null = null;
-
-function getDb(): Database.Database {
-  if (!_db) {
-    _db = new Database(DB_PATH);
-    _db.pragma("journal_mode = WAL");
-    _db.exec(`
-      CREATE TABLE IF NOT EXISTS config (
-        key TEXT NOT NULL,
-        user_id TEXT NOT NULL DEFAULT 'legacy-user',
-        value TEXT NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (key, user_id)
-      );
-
-      CREATE TABLE IF NOT EXISTS deploy_targets (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL DEFAULT 'legacy-user',
-        type TEXT NOT NULL,
-        name TEXT NOT NULL,
-        config_json TEXT NOT NULL DEFAULT '{}',
-        status TEXT NOT NULL DEFAULT 'unconfigured',
-        last_deployed_at TEXT,
-        agent_state_json TEXT NOT NULL DEFAULT '{}',
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-
-      CREATE TABLE IF NOT EXISTS mcp_connections (
-        id TEXT PRIMARY KEY,
-        target_id TEXT NOT NULL,
-        mcp_name TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'disconnected',
-        vault_id TEXT,
-        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY (target_id) REFERENCES deploy_targets(id)
-      );
-    `);
-    runMigrations(_db);
-  }
-  return _db;
-}
-
-function runMigrations(db: Database.Database) {
-  // Migrate deploy_targets: add user_id if missing
-  const dtCols = (db.prepare("PRAGMA table_info(deploy_targets)").all() as any[]).map(r => r.name);
-  if (!dtCols.includes("user_id")) {
-    db.exec("ALTER TABLE deploy_targets ADD COLUMN user_id TEXT NOT NULL DEFAULT 'legacy-user'");
-  }
-
-  // Migrate config: check if user_id column exists
-  const cfgCols = (db.prepare("PRAGMA table_info(config)").all() as any[]).map(r => r.name);
-  if (!cfgCols.includes("user_id")) {
-    db.exec("ALTER TABLE config ADD COLUMN user_id TEXT NOT NULL DEFAULT 'legacy-user'");
-  }
-}
+// ── Encryption (same key derivation as before) ──────────────────────────────
 
 const MACHINE_KEY = crypto.createHash("sha256")
   .update(process.env.CONFIG_ENCRYPTION_KEY || `coach-platform-${process.cwd()}`)
@@ -83,32 +28,12 @@ function decrypt(ciphertext: string): string {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
 
-// ── Config (key-value, user-scoped) ──
-
-export function getConfig(key: string, userId = "legacy-user"): string | null {
-  const row = getDb().prepare("SELECT value FROM config WHERE key = ? AND user_id = ?").get(key, userId) as { value: string } | undefined;
-  return row?.value ?? null;
-}
-
-export function setConfig(key: string, value: string, userId = "legacy-user"): void {
-  getDb().prepare(`
-    INSERT INTO config (key, user_id, value, updated_at) VALUES (?, ?, ?, datetime('now'))
-    ON CONFLICT(key, user_id) DO UPDATE SET value=excluded.value, updated_at=datetime('now')
-  `).run(key, userId, value);
-}
-
-export function getAllConfig(userId = "legacy-user"): Record<string, string> {
-  const rows = getDb().prepare("SELECT key, value FROM config WHERE user_id = ?").all(userId) as { key: string; value: string }[];
-  const result: Record<string, string> = {};
-  for (const r of rows) result[r.key] = r.value;
-  return result;
-}
-
-// ── Deploy Targets (user-scoped) ──
+// ── DeployTarget types ───────────────────────────────────────────────────────
 
 export interface DeployTarget {
   id: string;
   userId: string;
+  orgId: string;
   type: "cma" | "busibox";
   name: string;
   config: Record<string, any>;
@@ -119,82 +44,159 @@ export interface DeployTarget {
   updatedAt: string;
 }
 
-function rowToTarget(row: any): DeployTarget {
-  const configJson = JSON.parse(row.config_json || "{}");
-  if (configJson._encrypted_api_key) {
-    try { configJson.apiKey = decrypt(configJson._encrypted_api_key); } catch { configJson.apiKey = ""; }
-    delete configJson._encrypted_api_key;
+function rowToTarget(row: typeof deployTargets.$inferSelect): DeployTarget {
+  const configJson = (row.configJson as Record<string, any>) || {};
+  const config = { ...configJson };
+  if (config._encrypted_api_key) {
+    try { config.apiKey = decrypt(config._encrypted_api_key as string); } catch { config.apiKey = ""; }
+    delete config._encrypted_api_key;
   }
   return {
     id: row.id,
-    userId: row.user_id || "legacy-user",
-    type: row.type,
+    userId: row.userId,
+    orgId: row.orgId,
+    type: row.type as "cma" | "busibox",
     name: row.name,
-    config: configJson,
-    status: row.status,
-    lastDeployedAt: row.last_deployed_at,
-    agentState: JSON.parse(row.agent_state_json || "{}"),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    config,
+    status: row.status as DeployTarget["status"],
+    lastDeployedAt: row.lastDeployedAt?.toISOString() ?? null,
+    agentState: (row.agentState as Record<string, any>) || {},
+    createdAt: row.createdAt?.toISOString() ?? new Date().toISOString(),
+    updatedAt: row.updatedAt?.toISOString() ?? new Date().toISOString(),
   };
 }
 
-export function listTargets(userId?: string): DeployTarget[] {
-  if (userId) {
-    return getDb().prepare("SELECT * FROM deploy_targets WHERE user_id = ? ORDER BY created_at").all(userId).map(rowToTarget);
-  }
-  return getDb().prepare("SELECT * FROM deploy_targets ORDER BY created_at").all().map(rowToTarget);
+// ── Deploy Targets ───────────────────────────────────────────────────────────
+
+export async function listTargets(userId?: string): Promise<DeployTarget[]> {
+  const db = getDb();
+  const rows = userId
+    ? await db.select().from(deployTargets).where(eq(deployTargets.userId, userId)).orderBy(deployTargets.createdAt)
+    : await db.select().from(deployTargets).orderBy(deployTargets.createdAt);
+  return rows.map(rowToTarget);
 }
 
-export function getTarget(id: string, userId?: string): DeployTarget | undefined {
-  if (userId) {
-    const row = getDb().prepare("SELECT * FROM deploy_targets WHERE id = ? AND user_id = ?").get(id, userId);
-    return row ? rowToTarget(row) : undefined;
-  }
-  const row = getDb().prepare("SELECT * FROM deploy_targets WHERE id = ?").get(id);
+export async function getTarget(id: string, userId?: string): Promise<DeployTarget | undefined> {
+  const db = getDb();
+  const condition = userId
+    ? and(eq(deployTargets.id, id), eq(deployTargets.userId, userId))
+    : eq(deployTargets.id, id);
+  const [row] = await db.select().from(deployTargets).where(condition);
   return row ? rowToTarget(row) : undefined;
 }
 
-export function upsertTarget(target: DeployTarget): void {
+export async function upsertTarget(target: DeployTarget): Promise<void> {
+  const db = getDb();
   const configToStore = { ...target.config };
   if (configToStore.apiKey) {
-    configToStore._encrypted_api_key = encrypt(configToStore.apiKey);
+    configToStore._encrypted_api_key = encrypt(configToStore.apiKey as string);
     delete configToStore.apiKey;
   }
-  getDb().prepare(`
-    INSERT INTO deploy_targets (id, user_id, type, name, config_json, status, last_deployed_at, agent_state_json, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET
-      user_id=excluded.user_id, type=excluded.type, name=excluded.name, config_json=excluded.config_json,
-      status=excluded.status, last_deployed_at=excluded.last_deployed_at,
-      agent_state_json=excluded.agent_state_json, updated_at=datetime('now')
-  `).run(
-    target.id, target.userId || "legacy-user", target.type, target.name,
-    JSON.stringify(configToStore), target.status,
-    target.lastDeployedAt, JSON.stringify(target.agentState)
-  );
-}
 
-export function deleteTarget(id: string, userId?: string): void {
-  if (userId) {
-    getDb().prepare("DELETE FROM mcp_connections WHERE target_id = ? AND target_id IN (SELECT id FROM deploy_targets WHERE user_id = ?)").run(id, userId);
-    getDb().prepare("DELETE FROM deploy_targets WHERE id = ? AND user_id = ?").run(id, userId);
-  } else {
-    getDb().prepare("DELETE FROM mcp_connections WHERE target_id = ?").run(id);
-    getDb().prepare("DELETE FROM deploy_targets WHERE id = ?").run(id);
+  // Resolve orgId — callers that don't supply one get it from the user's org
+  let orgId = target.orgId;
+  if (!orgId) {
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .limit(1);
+    orgId = org?.id ?? "unknown";
   }
+
+  await db
+    .insert(deployTargets)
+    .values({
+      id: target.id,
+      orgId,
+      userId: target.userId,
+      type: target.type,
+      name: target.name,
+      configJson: configToStore,
+      status: target.status,
+      lastDeployedAt: target.lastDeployedAt ? new Date(target.lastDeployedAt) : null,
+      agentState: target.agentState,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: deployTargets.id,
+      set: {
+        userId: target.userId,
+        type: target.type,
+        name: target.name,
+        configJson: configToStore,
+        status: target.status,
+        lastDeployedAt: target.lastDeployedAt ? new Date(target.lastDeployedAt) : null,
+        agentState: target.agentState,
+        updatedAt: new Date(),
+      },
+    });
 }
 
-export function updateTargetStatus(id: string, status: DeployTarget["status"], agentState?: Record<string, any>): void {
-  if (agentState) {
-    getDb().prepare("UPDATE deploy_targets SET status = ?, agent_state_json = ?, last_deployed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
-      .run(status, JSON.stringify(agentState), id);
-  } else {
-    getDb().prepare("UPDATE deploy_targets SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id);
+export async function deleteTarget(id: string, userId?: string): Promise<void> {
+  const db = getDb();
+  const condition = userId
+    ? and(eq(deployTargets.id, id), eq(deployTargets.userId, userId))
+    : eq(deployTargets.id, id);
+  await db.delete(deployTargets).where(condition);
+}
+
+export async function updateTargetStatus(
+  id: string,
+  status: DeployTarget["status"],
+  agentState?: Record<string, any>
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(deployTargets)
+    .set({
+      status,
+      ...(agentState ? { agentState, lastDeployedAt: new Date() } : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(deployTargets.id, id));
+}
+
+// ── Config KV (mapped to app_settings, org-scoped) ──────────────────────────
+
+export async function getConfig(key: string, userId = "legacy-user"): Promise<string | null> {
+  const db = getDb();
+  const [row] = await db
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.key, `config:${userId}:${key}`));
+  return row ? (row.value as string) : null;
+}
+
+export async function setConfig(key: string, value: string, userId = "legacy-user"): Promise<void> {
+  const db = getDb();
+  const compositeKey = `config:${userId}:${key}`;
+  // appSettings requires an orgId — use a sentinel for the legacy KV store
+  // Real org-scoped settings go through the appSettings API directly
+  const [first] = await db.select({ id: organizations.id }).from(organizations).limit(1);
+  const orgId = first?.id ?? "system";
+  await db
+    .insert(appSettings)
+    .values({ id: uuidv4(), orgId, key: compositeKey, value })
+    .onConflictDoUpdate({
+      target: [appSettings.orgId, appSettings.key],
+      set: { value, updatedAt: new Date() },
+    });
+}
+
+export async function getAllConfig(userId = "legacy-user"): Promise<Record<string, string>> {
+  const db = getDb();
+  const prefix = `config:${userId}:`;
+  const rows = await db.select().from(appSettings);
+  const result: Record<string, string> = {};
+  for (const r of rows) {
+    if (r.key.startsWith(prefix)) {
+      result[r.key.slice(prefix.length)] = r.value as string;
+    }
   }
+  return result;
 }
 
-// ── MCP Connections ──
+// ── MCP Connections ──────────────────────────────────────────────────────────
 
 export interface McpConnection {
   id: string;
@@ -202,22 +204,46 @@ export interface McpConnection {
   mcpName: string;
   status: "disconnected" | "connected" | "error";
   vaultId: string | null;
+  connectionId?: string | null;
 }
 
-export function listMcpConnections(targetId: string): McpConnection[] {
-  return getDb().prepare("SELECT * FROM mcp_connections WHERE target_id = ? ORDER BY mcp_name").all(targetId).map((row: any) => ({
-    id: row.id,
-    targetId: row.target_id,
-    mcpName: row.mcp_name,
-    status: row.status,
-    vaultId: row.vault_id,
+export async function listMcpConnections(targetId: string): Promise<McpConnection[]> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(mcpConnections)
+    .where(eq(mcpConnections.targetId, targetId))
+    .orderBy(mcpConnections.mcpName);
+  return rows.map(r => ({
+    id: r.id,
+    targetId: r.targetId,
+    mcpName: r.mcpName,
+    status: r.status as McpConnection["status"],
+    vaultId: r.vaultId,
+    connectionId: r.connectionId,
   }));
 }
 
-export function upsertMcpConnection(conn: McpConnection): void {
-  getDb().prepare(`
-    INSERT INTO mcp_connections (id, target_id, mcp_name, status, vault_id, updated_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-    ON CONFLICT(id) DO UPDATE SET status=excluded.status, vault_id=excluded.vault_id, updated_at=datetime('now')
-  `).run(conn.id, conn.targetId, conn.mcpName, conn.status, conn.vaultId);
+export async function upsertMcpConnection(conn: McpConnection): Promise<void> {
+  const db = getDb();
+  await db
+    .insert(mcpConnections)
+    .values({
+      id: conn.id,
+      targetId: conn.targetId,
+      mcpName: conn.mcpName,
+      status: conn.status,
+      vaultId: conn.vaultId ?? null,
+      connectionId: conn.connectionId ?? null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [mcpConnections.targetId, mcpConnections.mcpName],
+      set: {
+        status: conn.status,
+        vaultId: conn.vaultId ?? null,
+        connectionId: conn.connectionId ?? null,
+        updatedAt: new Date(),
+      },
+    });
 }

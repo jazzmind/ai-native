@@ -4,7 +4,7 @@ import { getRequiredUser, handleAuthError } from "@/lib/auth";
 export async function GET() {
   try {
     const user = await getRequiredUser();
-    const targets = listTargets(user.id);
+    const targets = await listTargets(user.id);
     const hasDeployed = targets.some((t) => t.status === "deployed");
     const hasConfigured = targets.some(
       (t) => t.status === "configured" || t.status === "deployed"

@@ -12,9 +12,9 @@ async function resolveApiKey(orgId: string, userId: string): Promise<string | nu
   return process.env.ANTHROPIC_API_KEY || null;
 }
 
-function getTrackedAgentIds(userId: string): Set<string> {
+async function getTrackedAgentIds(userId: string): Promise<Set<string>> {
   const tracked = new Set<string>();
-  const targets = listTargets(userId);
+  const targets = await listTargets(userId);
   for (const t of targets) {
     for (const agent of Object.values(t.agentState?.agents || {})) {
       const id = (agent as any).id;
@@ -40,7 +40,7 @@ export async function GET(_req: NextRequest) {
   const client = new Anthropic({ apiKey });
 
   try {
-    const tracked = getTrackedAgentIds(user.id);
+    const tracked = await getTrackedAgentIds(user.id);
 
     // Fetch all agents (paginate if needed)
     let allAgents: any[] = [];
@@ -94,8 +94,7 @@ export async function POST(req: NextRequest) {
   let toArchive: string[] = agentIds || [];
 
   if (archiveOrphans) {
-    // Build the list automatically
-    const tracked = getTrackedAgentIds(user.id);
+    const tracked = await getTrackedAgentIds(user.id);
     let allAgents: any[] = [];
     let cursor: string | undefined;
     do {
@@ -122,12 +121,12 @@ export async function POST(req: NextRequest) {
 
   // Also clean up any stale targets (targets with status=deployed but empty agentState)
   if (archiveOrphans) {
-    const targets = listTargets(user.id);
+    const targets = await listTargets(user.id);
     for (const t of targets) {
       if (t.status === "deployed") {
         const agentKeys = Object.keys(t.agentState?.agents || {});
         if (agentKeys.length === 0) {
-          updateTargetStatus(t.id, "error");
+          await updateTargetStatus(t.id, "error");
         }
       }
     }
