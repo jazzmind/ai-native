@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install -g pnpm@9 && cd ../.. && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build",
+  "installCommand": "corepack enable && cd ../.. && corepack pnpm install --no-frozen-lockfile",
+  "buildCommand": "corepack pnpm build",
   "crons": [
     {
       "path": "/api/cron/process-bids",
