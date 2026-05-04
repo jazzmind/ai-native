@@ -16,12 +16,8 @@ export async function GET() {
 
     return Response.json(info);
   } catch (err) {
-    if (err instanceof AuthError) return handleAuthError(err);
-    // Even on auth error, surface env key presence
-    if (process.env.ANTHROPIC_API_KEY) {
-      return Response.json({ hasKey: true, hint: "env", provider: 'anthropic', isEnvKey: true });
-    }
-    return Response.json({ hasKey: false, hint: null, provider: 'anthropic' });
+    // Only surface platform key status to authenticated users; on any failure return 401/500
+    return handleAuthError(err);
   }
 }
 

@@ -5,15 +5,30 @@ import {
   getExpertCommentsByReview,
   updateReviewStatus,
 } from "@/lib/db";
+import { getRequiredUser, handleAuthError } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user: { id: string; email: string };
+  try {
+    user = await getRequiredUser();
+  } catch (err) {
+    return handleAuthError(err);
+  }
+
   const { id } = await params;
   const review = await getReviewRequest(id);
   if (!review) {
     return Response.json({ error: "Review not found" }, { status: 404 });
+  }
+
+  // Only the requester or the invited expert can read comments
+  const isRequester = review.requester_user_id === user.id;
+  const isExpert = review.expert_email.toLowerCase() === user.email.toLowerCase();
+  if (!isRequester && !isExpert) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const comments = await getExpertCommentsByReview(id);
@@ -24,6 +39,13 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let user: { id: string; email: string };
+  try {
+    user = await getRequiredUser();
+  } catch (err) {
+    return handleAuthError(err);
+  }
+
   const { id } = await params;
   const review = await getReviewRequest(id);
   if (!review) {
@@ -34,11 +56,17 @@ export async function POST(
     return Response.json({ error: "Review is no longer active" }, { status: 400 });
   }
 
-  const body = await req.json();
-  const { content, authorEmail, authorName, parentMessageId } = body;
+  // Only the invited expert can post comments; enforce their identity
+  const isExpert = review.expert_email.toLowerCase() === user.email.toLowerCase();
+  if (!isExpert) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  if (!content || !authorEmail) {
-    return Response.json({ error: "content and authorEmail are required" }, { status: 400 });
+  const body = await req.json();
+  const { content, authorName, parentMessageId } = body;
+
+  if (!content) {
+    return Response.json({ error: "content is required" }, { status: 400 });
   }
 
   if (review.status === "pending") {
@@ -48,7 +76,7 @@ export async function POST(
   const comment = await addExpertComment(
     id,
     review.conversation_id,
-    authorEmail,
+    user.email,
     content,
     authorName,
     undefined,

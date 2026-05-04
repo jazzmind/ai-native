@@ -10,7 +10,8 @@ function makeClient(apiKey: string): Anthropic {
 export async function getOrCreateSession(
   conversationId: string,
   coach: CoachConfig,
-  apiKey: string
+  apiKey: string,
+  userId: string
 ): Promise<string> {
   const existing = await getCoachSession(conversationId, coach.key);
   if (existing) {
@@ -26,7 +27,7 @@ export async function getOrCreateSession(
   const client = makeClient(apiKey);
   const session = await client.beta.sessions.create({
     agent: coach.agentId,
-    environment_id: await getEnvironmentId(),
+    environment_id: await getEnvironmentId(userId),
   });
 
   await setCoachSession(conversationId, coach.key, session.id);

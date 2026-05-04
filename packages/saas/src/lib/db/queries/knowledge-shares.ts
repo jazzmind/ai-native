@@ -1,4 +1,4 @@
-import { eq, or } from 'drizzle-orm';
+import { eq, or, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../client';
 import { knowledgeShares } from '../schema';
@@ -60,5 +60,5 @@ export async function deleteKnowledgeShare(id: string, userId: string): Promise<
   const db = getDb();
   await db
     .delete(knowledgeShares)
-    .where(eq(knowledgeShares.id, id));
+    .where(and(eq(knowledgeShares.id, id), eq(knowledgeShares.sharedByUserId, userId)));
 }

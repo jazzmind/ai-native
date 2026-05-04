@@ -53,9 +53,14 @@ export function markdownToEmailHtml(md: string): string {
     return `\x00CODE${idx}\x00`;
   });
 
-  // Inline code
+  // Escape HTML entities in remaining text (after code-block placeholders are extracted)
+  // so that user/LLM content cannot inject arbitrary HTML. Inline markdown transforms
+  // below produce trusted HTML tags on top of this pre-escaped text.
+  text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // Inline code (esc() applied to captured code before transform)
   text = text.replace(/`([^`]+)`/g, (_, code) =>
-    `<code style="background:#2a2a3a;border:1px solid #3a3a4a;border-radius:4px;padding:1px 5px;font-family:'Courier New',Courier,monospace;font-size:13px;color:#cba6f7">${esc(code)}</code>`
+    `<code style="background:#2a2a3a;border:1px solid #3a3a4a;border-radius:4px;padding:1px 5px;font-family:'Courier New',Courier,monospace;font-size:13px;color:#cba6f7">${code}</code>`
   );
 
   // Bold + italic together (***text***)
@@ -65,10 +70,13 @@ export function markdownToEmailHtml(md: string): string {
   // Italic
   text = text.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em style="font-style:italic">$1</em>');
 
-  // Links
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
-    `<a href="$2" style="color:#7c3aed;text-decoration:underline">$1</a>`
-  );
+  // Links — sanitize href to only allow http/https/mailto.
+  // Display text is already HTML-escaped from the pass above.
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, linkText, href) => {
+    const rawHref = href.trim().replace(/&amp;/g, '&'); // restore for URL parse
+    const safeHref = /^(https?:|mailto:)/i.test(rawHref) ? esc(rawHref) : '#';
+    return `<a href="${safeHref}" style="color:#7c3aed;text-decoration:underline">${linkText}</a>`;
+  });
 
   // HR
   text = text.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid #2a2a2a;margin:24px 0">');
@@ -88,7 +96,7 @@ export function markdownToEmailHtml(md: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Headings
+    // Headings (text already pre-escaped above)
     const h1 = line.match(/^# (.+)/);
     const h2 = line.match(/^## (.+)/);
     const h3 = line.match(/^### (.+)/);
@@ -138,7 +146,7 @@ export function markdownToEmailHtml(md: string): string {
       continue;
     }
 
-    // Regular paragraph text
+    // Regular paragraph text (pre-escaped)
     closeList();
     htmlLines.push(`<p style="font-size:14px;line-height:1.75;color:#d4d4d4;margin:10px 0">${line}</p>`);
   }
@@ -162,6 +170,8 @@ export function artifactEmailHtml(opts: {
   date: string;
 }): string {
   const bodyHtml = markdownToEmailHtml(opts.content);
+  const escHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   return `<!DOCTYPE html>
 <html>
@@ -174,8 +184,8 @@ export function artifactEmailHtml(opts: {
   <div style="max-width:640px;margin:40px auto;padding:0 16px">
     <!-- Header -->
     <div style="background:#7c3aed;border-radius:12px 12px 0 0;padding:24px 32px">
-      <h1 style="margin:0;font-size:20px;font-weight:700;color:#fff;line-height:1.3">${opts.title}</h1>
-      <p style="margin:6px 0 0;font-size:13px;color:#ddd6fe">Run #${opts.runNumber} &nbsp;·&nbsp; ${opts.date}</p>
+      <h1 style="margin:0;font-size:20px;font-weight:700;color:#fff;line-height:1.3">${escHtml(opts.title)}</h1>
+      <p style="margin:6px 0 0;font-size:13px;color:#ddd6fe">Run #${escHtml(String(opts.runNumber))} &nbsp;·&nbsp; ${escHtml(opts.date)}</p>
     </div>
 
     <!-- Body -->
@@ -185,7 +195,7 @@ export function artifactEmailHtml(opts: {
 
     <!-- CTA -->
     <div style="background:#141414;border:1px solid #2a2a2a;border-top:none;padding:24px 32px;text-align:center">
-      <a href="${opts.artifactUrl}"
+      <a href="${escHtml(opts.artifactUrl)}"
          style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.01em">
         Open in app →
       </a>
@@ -194,7 +204,7 @@ export function artifactEmailHtml(opts: {
     <!-- Footer -->
     <div style="padding:16px 0;text-align:center;font-size:12px;color:#525252">
       Delivered by your Chief of Staff &nbsp;·&nbsp;
-      <a href="${opts.artifactUrl}" style="color:#7c3aed;text-decoration:none">View in app</a>
+      <a href="${escHtml(opts.artifactUrl)}" style="color:#7c3aed;text-decoration:none">View in app</a>
     </div>
   </div>
 </body>

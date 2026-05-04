@@ -14,7 +14,11 @@ interface DeployState {
   environment_id: string;
 }
 
-async function loadDeployState(): Promise<DeployState | null> {
+/**
+ * Loads the deploy state for a specific user.
+ * Scoped to userId so one tenant's deployment cannot bleed into another's session.
+ */
+async function loadDeployState(userId: string): Promise<DeployState | null> {
   // Try .deploy-state.json first (CLI deployment via deploy.py).
   const statePath = path.resolve(process.cwd(), "..", ".deploy-state.json");
   try {
@@ -24,9 +28,9 @@ async function loadDeployState(): Promise<DeployState | null> {
     // Fall through to database
   }
 
-  // Read from Neon — always fresh, no module-level cache.
+  // Read from Neon — scoped to the current user to prevent cross-tenant agent bleed.
   try {
-    const targets = await listTargets();
+    const targets = await listTargets(userId);
     const deployedCandidates = targets
       .filter((t) => t.status === "deployed" && t.agentState?.agents && Object.keys(t.agentState.agents).length > 0)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
@@ -48,40 +52,40 @@ export function resetDeployState(): void {
   // No-op — state is always read fresh from Neon on each call.
 }
 
-export async function getAgentId(key: string): Promise<string> {
-  const state = await loadDeployState();
+export async function getAgentId(key: string, userId: string): Promise<string> {
+  const state = await loadDeployState(userId);
   if (!state) return "";
   const entry = state.agents[key];
   if (!entry) return "";
   return entry.id;
 }
 
-export async function getEnvironmentId(): Promise<string> {
-  return (await loadDeployState())?.environment_id ?? "";
+export async function getEnvironmentId(userId: string): Promise<string> {
+  return (await loadDeployState(userId))?.environment_id ?? "";
 }
 
-export async function getCoachConfig(meta: CoachMeta): Promise<CoachConfig> {
+export async function getCoachConfig(meta: CoachMeta, userId: string): Promise<CoachConfig> {
   return {
     ...meta,
-    agentId: await getAgentId(meta.key),
+    agentId: await getAgentId(meta.key, userId),
   };
 }
 
-export async function getCoachByKey(key: string): Promise<CoachConfig | undefined> {
+export async function getCoachByKey(key: string, userId: string): Promise<CoachConfig | undefined> {
   const meta = COACH_META.find((c) => c.key === key);
   if (!meta) return undefined;
-  return getCoachConfig(meta);
+  return getCoachConfig(meta, userId);
 }
 
-export async function getAllCoaches(): Promise<CoachConfig[]> {
-  return Promise.all(COACH_META.map((m) => getCoachConfig(m)));
+export async function getAllCoaches(userId: string): Promise<CoachConfig[]> {
+  return Promise.all(COACH_META.map((m) => getCoachConfig(m, userId)));
 }
 
-export async function getQAJudgeConfig(): Promise<CoachConfig> {
+export async function getQAJudgeConfig(userId: string): Promise<CoachConfig> {
   return {
     key: "qa-judge",
     name: "QA Judge",
-    agentId: await getAgentId("qa-judge"),
+    agentId: await getAgentId("qa-judge", userId),
     description: "Research quality evaluator",
     icon: "Target" as CoachIconName,
     keywords: [],

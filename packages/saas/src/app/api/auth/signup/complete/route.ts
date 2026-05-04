@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         website: website?.trim() || null,
         businessDescription: businessDescription?.trim() || null,
         businessStage: businessStage || null,
-        apiKey: apiKey?.trim() || null,
+        hasApiKey: !!(apiKey?.trim()),
       },
     });
   } catch (err) {

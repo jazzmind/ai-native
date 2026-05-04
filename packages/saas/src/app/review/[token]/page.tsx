@@ -203,7 +203,15 @@ export default function ReviewPage() {
                     {isHighlighted && <span className="text-yellow-400 font-medium">Review requested</span>}
                   </div>
                   <div className="text-sm prose prose-sm prose-invert max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        a: ({ href, children }) => {
+                          const safeHref = href && /^(https?:|mailto:|#)/i.test(href) ? href : '#';
+                          return <a href={safeHref} target="_blank" rel="noopener noreferrer">{children}</a>;
+                        },
+                      }}
+                    >{msg.content}</ReactMarkdown>
                   </div>
 
                   {/* Reply button */}

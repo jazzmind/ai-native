@@ -201,13 +201,25 @@ export async function POST(request: NextRequest) {
   });
 }
 
-/** Load a skill's SKILL.md content by name. Returns null if not found. */
+const SAFE_SKILL_NAME = /^[a-z0-9][a-z0-9_-]*$/i;
+
+/** Load a skill's SKILL.md content by name. Returns null if not found or name is unsafe. */
 function loadSkillContent(skillName: string): string | null {
+  // Allowlist: only alphanumerics, hyphens, underscores. Prevents path traversal.
+  if (!SAFE_SKILL_NAME.test(skillName)) {
+    return null;
+  }
+
+  const skillsRoot = resolve(process.cwd(), "advisors", "skills");
   const candidates = [
-    resolve(process.cwd(), "advisors", "skills", skillName, "SKILL.md"),
+    resolve(skillsRoot, skillName, "SKILL.md"),
     join(resolve(__dirname, "..", "..", "..", "advisors"), "skills", skillName, "SKILL.md"),
   ];
   for (const p of candidates) {
+    // Verify the resolved path stays within the skills root
+    if (!p.startsWith(skillsRoot)) {
+      continue;
+    }
     if (existsSync(p)) {
       return readFileSync(p, "utf-8");
     }

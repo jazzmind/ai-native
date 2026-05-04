@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { listMcpConnections, upsertMcpConnection } from "@/lib/config-store";
+import { listMcpConnections, upsertMcpConnection, getTarget } from "@/lib/config-store";
 import { getRequiredUser, handleAuthError } from "@/lib/auth";
 import { v4 as uuidv4 } from "uuid";
 
@@ -10,8 +10,9 @@ const MCP_SERVERS = [
 ];
 
 export async function GET(req: NextRequest) {
+  let user: { id: string };
   try {
-    await getRequiredUser();
+    user = await getRequiredUser();
   } catch (err) {
     return handleAuthError(err);
   }
@@ -20,6 +21,12 @@ export async function GET(req: NextRequest) {
   const targetId = searchParams.get("targetId");
 
   if (targetId) {
+    // Verify this target belongs to the current user before listing connections
+    const target = await getTarget(targetId, user.id);
+    if (!target) {
+      return Response.json({ error: "Target not found" }, { status: 404 });
+    }
+
     const connections = await listMcpConnections(targetId);
     const result = MCP_SERVERS.map(server => {
       const conn = connections.find(c => c.mcpName === server.name);
@@ -37,14 +44,23 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  let user: { id: string };
   try {
-    await getRequiredUser();
+    user = await getRequiredUser();
   } catch (err) {
     return handleAuthError(err);
   }
 
   const body = await req.json();
   const { action, targetId, mcpName, vaultId } = body;
+
+  // Verify the target belongs to the current user before modifying MCP connections
+  if (targetId) {
+    const target = await getTarget(targetId, user.id);
+    if (!target) {
+      return Response.json({ error: "Target not found" }, { status: 404 });
+    }
+  }
 
   if (action === "connect") {
     const conn = {

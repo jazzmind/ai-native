@@ -21,21 +21,22 @@ export interface RoutingDecision {
   mode: AgentMode;
 }
 
-async function extractExplicitMention(message: string): Promise<CoachConfig | null> {
+async function extractExplicitMention(message: string, userId: string): Promise<CoachConfig | null> {
   const lower = message.toLowerCase();
   const atMatch = lower.match(/@(\w+)/);
   if (atMatch) {
     const mention = atMatch[1];
-    return (await getCoachByKey(mention)) || null;
+    return (await getCoachByKey(mention, userId)) || null;
   }
   return null;
 }
 
 export async function routeMessage(
   message: string,
+  userId: string,
   explicitMode?: AgentMode
 ): Promise<RoutingDecision> {
-  const explicit = await extractExplicitMention(message);
+  const explicit = await extractExplicitMention(message, userId);
   if (explicit) {
     return {
       coaches: [explicit],
@@ -97,12 +98,12 @@ ${modeCoachCountGuidance}
       response.content[0].type === "text" ? response.content[0].text : "";
     const parsed = JSON.parse(text);
     const coaches = (await Promise.all(
-      (parsed.coaches as string[]).map((key: string) => getCoachByKey(key))
+      (parsed.coaches as string[]).map((key: string) => getCoachByKey(key, userId))
     )).filter(Boolean) as CoachConfig[];
 
     if (coaches.length === 0) {
-      const allCoaches = await getAllCoaches();
-      const fallback = (await getCoachByKey("ea")) || allCoaches[0];
+      const allCoaches = await getAllCoaches(userId);
+      const fallback = (await getCoachByKey("ea", userId)) || allCoaches[0];
       return {
         coaches: [fallback],
         reasoning: "Fallback to Chief of Staff",
@@ -122,8 +123,8 @@ ${modeCoachCountGuidance}
       mode: explicitMode || detectedMode,
     };
   } catch {
-    const allCoaches = await getAllCoaches();
-    const fallback = (await getCoachByKey("ea")) || allCoaches[0];
+    const allCoaches = await getAllCoaches(userId);
+    const fallback = (await getCoachByKey("ea", userId)) || allCoaches[0];
     return {
       coaches: [fallback],
       reasoning: "Router parse error, defaulting to Chief of Staff",

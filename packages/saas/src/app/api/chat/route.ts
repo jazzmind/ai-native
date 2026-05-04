@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   let activeMode: AgentMode;
 
   if (coachKeys && coachKeys.length > 0) {
-    const resolved = (await Promise.all(coachKeys.map((k) => getCoachByKey(k))))
+    const resolved = (await Promise.all(coachKeys.map((k) => getCoachByKey(k, user.id))))
       .filter(Boolean) as CoachConfig[];
     if (resolved.length === 0) {
       return Response.json({ error: "No valid coaches found" }, { status: 400 });
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     routingInfo = `Selected: ${coaches.map((c) => c.name).join(", ")}`;
     activeMode = explicitMode || "advise";
   } else {
-    const decision = await routeMessage(message, explicitMode);
+    const decision = await routeMessage(message, user.id, explicitMode);
     coaches = decision.coaches;
     synthesize = decision.synthesize;
     routingInfo = decision.reasoning;
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
 
         let eaPlanningResponse = "";
         try {
-          const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey);
+          const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey, user.id);
           for await (const event of streamCoachResponse(sessionId, eaPlanningMessage, eaCoach.key, anthropicKey)) {
             switch (event.type) {
               case "text":
@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
 
           const dispatchedCoaches: CoachConfig[] = [];
           for (const key of dispatchMap.keys()) {
-            const coach = await getCoachByKey(key);
+            const coach = await getCoachByKey(key, user.id);
             if (coach) dispatchedCoaches.push(coach);
           }
 
@@ -354,7 +354,7 @@ export async function POST(req: NextRequest) {
 
               let advisorResponse = "";
               try {
-                const sessionId = await getOrCreateSession(convId!, coach, anthropicKey);
+                const sessionId = await getOrCreateSession(convId!, coach, anthropicKey, user.id);
                 for await (const event of streamCoachResponse(sessionId, advisorMessage, coach.key, anthropicKey)) {
                   switch (event.type) {
                     case "text":
@@ -410,7 +410,7 @@ export async function POST(req: NextRequest) {
 
               let eaSynthesis = "";
               try {
-                const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey);
+                const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey, user.id);
                 for await (const event of streamCoachResponse(sessionId, synthesisQuestion, eaCoach.key, anthropicKey)) {
                   switch (event.type) {
                     case "text":
@@ -462,7 +462,7 @@ export async function POST(req: NextRequest) {
 
           let fullResponse = "";
           try {
-            const sessionId = await getOrCreateSession(convId!, coach, anthropicKey);
+            const sessionId = await getOrCreateSession(convId!, coach, anthropicKey, user.id);
 
             for await (const event of streamCoachResponse(sessionId, contextualMessage, coach.key, anthropicKey)) {
               switch (event.type) {

@@ -64,11 +64,15 @@ export async function getOrganizationBySlug(slug: string): Promise<Organization 
 
 export async function getUserOrganization(userId: string): Promise<Organization | undefined> {
   const db = getDb();
-  const [membership] = await db
+  // Order by role (owner first) then creation date so the result is deterministic
+  // for multi-org users and always prefers the org the user owns.
+  const memberships = await db
     .select()
     .from(orgMemberships)
-    .where(eq(orgMemberships.userId, userId));
+    .where(eq(orgMemberships.userId, userId))
+    .orderBy(orgMemberships.role, orgMemberships.createdAt);
 
+  const membership = memberships.find(m => m.role === 'owner') ?? memberships[0];
   if (!membership) return undefined;
 
   const [org] = await db

@@ -61,16 +61,20 @@ const mdComponents: Components = {
     </blockquote>
   ),
   hr: () => <hr className="border-[var(--border)] my-3" />,
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-blue-400 underline hover:text-blue-300"
-    >
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => {
+    // Only allow safe protocols; block javascript:, data:, vbscript:, etc.
+    const safeHref = href && /^(https?:|mailto:|#)/i.test(href) ? href : '#';
+    return (
+      <a
+        href={safeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-400 underline hover:text-blue-300"
+      >
+        {children}
+      </a>
+    );
+  },
   table: ({ children }) => (
     <div className="overflow-x-auto my-2">
       <table className="w-full text-xs border-collapse">{children}</table>

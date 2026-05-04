@@ -4,15 +4,32 @@ import { v4 as uuidv4 } from "uuid";
 import { getDb } from "./db/client";
 import { deployTargets, mcpConnections, appSettings, organizations } from "./db/schema";
 
-// ── Encryption (same key derivation as before) ──────────────────────────────
+// ── Encryption ───────────────────────────────────────────────────────────────
 
-const MACHINE_KEY = crypto.createHash("sha256")
-  .update(process.env.CONFIG_ENCRYPTION_KEY || `coach-platform-${process.cwd()}`)
-  .digest();
+function getMachineKey(): Buffer {
+  const configKey = process.env.CONFIG_ENCRYPTION_KEY;
+  if (!configKey) {
+    // Warn loudly in production; dev fallback is intentionally weak
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('CONFIG_ENCRYPTION_KEY environment variable is required in production');
+    }
+    console.warn('[security] CONFIG_ENCRYPTION_KEY is not set — using insecure dev fallback. Set this env var before going to production.');
+  }
+  return crypto.createHash("sha256")
+    .update(configKey || `coach-platform-${process.cwd()}`)
+    .digest();
+}
+
+// Lazily initialised so the throw path above only fires when encryption is actually used
+let _machineKey: Buffer | null = null;
+function getMachineKeyCached(): Buffer {
+  if (!_machineKey) _machineKey = getMachineKey();
+  return _machineKey;
+}
 
 function encrypt(plaintext: string): string {
   const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv("aes-256-gcm", MACHINE_KEY, iv);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getMachineKeyCached(), iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return iv.toString("hex") + ":" + tag.toString("hex") + ":" + encrypted.toString("hex");
@@ -23,7 +40,7 @@ function decrypt(ciphertext: string): string {
   const iv = Buffer.from(ivHex, "hex");
   const tag = Buffer.from(tagHex, "hex");
   const encrypted = Buffer.from(encHex, "hex");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", MACHINE_KEY, iv);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", getMachineKeyCached(), iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
@@ -93,14 +110,11 @@ export async function upsertTarget(target: DeployTarget): Promise<void> {
     delete configToStore.apiKey;
   }
 
-  // Resolve orgId — callers that don't supply one get it from the user's org
-  let orgId = target.orgId;
+  // Callers must supply orgId; refuse to proceed with an empty one to prevent
+  // silent mis-attribution to an arbitrary org (security: tenant isolation).
+  const orgId = target.orgId;
   if (!orgId) {
-    const [org] = await db
-      .select({ id: organizations.id })
-      .from(organizations)
-      .limit(1);
-    orgId = org?.id ?? "unknown";
+    throw new Error('upsertTarget: orgId is required');
   }
 
   await db

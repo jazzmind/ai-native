@@ -6,7 +6,7 @@ import { getDb } from "@/lib/db/client";
 import { marketplaceRequests } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { notifyEligibleExperts } from "@/lib/marketplace-engine";
-import { getMessages } from "@/lib/db";
+import { getMessages, getConversation } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -38,6 +38,12 @@ export async function POST(req: NextRequest) {
 
     if (budgetCents < 2500) {
       return Response.json({ error: "Minimum budget is $25 (2500 cents)" }, { status: 400 });
+    }
+
+    // Verify the conversation belongs to this user before reading messages
+    const conversation = await getConversation(conversationId, user.id);
+    if (!conversation) {
+      return Response.json({ error: "Conversation not found" }, { status: 404 });
     }
 
     // Build context summary from conversation
