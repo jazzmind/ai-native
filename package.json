@@ -1,0 +1,24 @@
+{
+  "name": "ai-native",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev:saas": "pnpm --filter saas dev",
+    "dev:busibox": "pnpm --filter ai-native-busibox dev",
+    "build": "turbo build",
+    "build:saas": "pnpm --filter saas build",
+    "build:busibox": "pnpm --filter ai-native-busibox build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.3",
+    "typescript": "^6.0.2"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

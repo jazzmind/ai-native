@@ -1,8 +1,8 @@
 # Dependencies
-app/node_modules/
+*node_modules/
 
 # Build output
-app/.next/
+*.next/
 
 # SQLite databases
 *.db
@@ -10,12 +10,12 @@ app/.next/
 *.db-shm
 
 # Electron build output
-app/dist/
+*dist/
 
 # Environment files
 .env
 .env.local
-app/.env.local
+*.env.local
 
 # Deploy state (contains agent IDs, not secrets)
 # Include this if you want to track deployed agents

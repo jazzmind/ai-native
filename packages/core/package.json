@@ -1,0 +1,33 @@
+{
+  "name": "@ai-native/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./providers": "./src/providers/index.ts",
+    "./coaches": "./src/coaches/index.ts",
+    "./modes": "./src/modes/index.ts",
+    "./parsers": "./src/parsers/index.ts",
+    "./types": "./src/types/index.ts",
+    "./components": "./src/components/index.ts",
+    "./components/*": "./src/components/*.tsx"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^1.8.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.2"
+  },
+  "peerDependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  }
+}

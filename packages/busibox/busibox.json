@@ -1,0 +1,23 @@
+{
+  "$schema": "https://busibox.io/schemas/app-manifest-v1.json",
+  "name": "AI Advisory Team",
+  "id": "ai-native",
+  "version": "1.0.0",
+  "description": "AI-native advisory workspace with 8 specialized advisors: Founder, Strategy, Technology, Funding, Finance, Legal, Growth, and Chief of Staff. Uses local LLM infrastructure via Busibox agent-api.",
+  "icon": "Brain",
+  "defaultPath": "/ai-native",
+  "defaultPort": 3018,
+  "healthEndpoint": "/api/health",
+  "buildCommand": "npm run build",
+  "startCommand": "npm start",
+  "appMode": "frontend",
+  "requiredEnvVars": [
+    "AGENT_API_URL",
+    "DATA_API_URL",
+    "SEARCH_API_URL"
+  ],
+  "optionalEnvVars": [
+    "NEXT_PUBLIC_DEBUG"
+  ],
+  "busiboxAppVersion": "^3.0.0"
+}

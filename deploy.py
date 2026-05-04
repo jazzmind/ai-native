@@ -139,6 +139,15 @@ COACH_CONFIGS = [
         "mcp": ["notion", "slack"],
         "skills": [],
     },
+    {
+        "name": "MK Coach",
+        "dir": "mk",
+        "model": "claude-sonnet-4-6",
+        "description": "Personal knowledge practices coach. Helps with readiness, enoughness, research loops, ignorance, wisdom, stewardship, and building a personal knowledge constitution.",
+        "callable": ["founder", "strategy", "qa-judge", "technology"],
+        "mcp": [],
+        "skills": [],
+    },
 ]
 
 
