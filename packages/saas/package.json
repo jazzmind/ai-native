@@ -2,7 +2,7 @@
   "name": "saas",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev --turbopack",
