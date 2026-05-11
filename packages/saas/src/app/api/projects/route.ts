@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getRequiredUser, getRequiredUserAndOrg, handleAuthError, AuthError } from "@/lib/auth";
+import { getRequiredUserAndOrg, handleAuthError, AuthError } from "@/lib/auth";
 import {
   listProjects,
   createProject,
@@ -12,8 +12,8 @@ import { trackEvent, Events } from "@/lib/usage-tracking";
 
 export async function GET() {
   try {
-    const user = await getRequiredUser();
-    await getOrCreateDefaultProject(user.id);
+    const { user, org } = await getRequiredUserAndOrg();
+    await getOrCreateDefaultProject(user.id, org.id);
     const [projectList, stats] = await Promise.all([
       listProjects(user.id),
       getProjectStats(user.id),
@@ -32,7 +32,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getRequiredUser();
+    const { user, org } = await getRequiredUserAndOrg();
     const body = await req.json();
     const { action } = body;
 
@@ -52,9 +52,8 @@ export async function POST(req: NextRequest) {
     if (!body.name?.trim()) {
       return Response.json({ error: "name is required" }, { status: 400 });
     }
-    const project = await createProject(user.id, body.name, body.description);
+    const project = await createProject(user.id, body.name, body.description, org.id);
     try {
-      const { org } = await getRequiredUserAndOrg();
       trackEvent(org.id, user.id, Events.PROJECT_CREATED, { projectName: body.name });
     } catch { /* tracking non-critical */ }
     return Response.json({ ok: true, project });

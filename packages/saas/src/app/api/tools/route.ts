@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
-import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
 import { listToolTrust, setToolTrust, deleteToolTrust } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   let user;
   try {
-    user = await getRequiredUser();
+    ({ user } = await getRequiredUserAndOrg());
   } catch (err) {
     return handleAuthError(err);
   }
@@ -23,8 +23,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   let user;
+  let orgId: string;
   try {
-    user = await getRequiredUser();
+    ({ user, org: { id: orgId } } = await getRequiredUserAndOrg());
   } catch (err) {
     return handleAuthError(err);
   }
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
       if (!["auto", "confirm", "blocked"].includes(trustLevel)) {
         return Response.json({ error: "trustLevel must be auto, confirm, or blocked" }, { status: 400 });
       }
-      await setToolTrust(user.id, projectId, toolPattern, trustLevel);
+      await setToolTrust(user.id, projectId, toolPattern, trustLevel, orgId);
       return Response.json({ ok: true });
     }
 

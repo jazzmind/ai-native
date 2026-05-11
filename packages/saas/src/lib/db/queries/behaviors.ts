@@ -63,7 +63,7 @@ export async function createBehavior(
   userId: string,
   directive: string,
   source = 'manual',
-  orgId = ''
+  orgId: string
 ): Promise<AgentBehavior> {
   const db = getDb();
   const id = uuidv4();
@@ -147,7 +147,7 @@ export async function createRevision(
   analysis: string,
   proposedDirective: string,
   sourceFeedbackIds: string[],
-  orgId = ''
+  orgId: string
 ): Promise<BehaviorRevision> {
   const db = getDb();
   const id = uuidv4();

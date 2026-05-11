@@ -104,12 +104,80 @@ export async function executeBriefingTask(task: DueTask, userEmail: string): Pro
     .map((b) => (b as Anthropic.TextBlock).text)
     .join("\n\n");
 
+  // ── Outcome rubric check ─────────────────────────────────────────────────
+  // If a rubric is defined in context, iterate up to maxIterations until it passes.
+  const rubric = context.rubric as string | undefined;
+  const maxIterations = Math.min((context.maxIterations as number) || 2, 3);
+
+  let finalBriefingContent = content;
+
+  if (rubric && maxIterations > 1) {
+    for (let iter = 1; iter <= maxIterations; iter++) {
+      const evalResponse = await client.messages.create({
+        model,
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "user",
+            content: `You are a quality evaluator for briefing documents.
+
+RUBRIC:
+${rubric}
+
+BRIEFING TO EVALUATE:
+${finalBriefingContent}
+
+Respond with JSON only:
+{"passed": true|false, "score": 0-10, "feedback": "brief actionable feedback"}`,
+          },
+        ],
+      } as Parameters<typeof client.messages.create>[0]) as Anthropic.Message;
+
+      let passed = false;
+      let feedback = "";
+      try {
+        const evalText = (evalResponse.content.find(b => (b as any).type === "text") as any)?.text ?? "";
+        const jsonMatch = evalText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const evalResult = JSON.parse(jsonMatch[0]);
+          passed = !!evalResult.passed;
+          feedback = evalResult.feedback ?? "";
+        }
+      } catch {
+        passed = true;
+      }
+
+      if (passed || iter === maxIterations) break;
+
+      const retryPrompt = `${prompt}\n\n[REVISION REQUESTED]\nPrevious version did not meet quality standards.\nFeedback: ${feedback}\n\nPlease produce an improved version addressing the feedback.`;
+      const retryResponse = await client.messages.create({
+        model,
+        max_tokens: 4096,
+        ...(tools.length > 0 ? { tools } : {}),
+        messages: [{ role: "user", content: retryPrompt }],
+      } as Parameters<typeof client.messages.create>[0]) as Anthropic.Message;
+
+      const retryBlocks = retryResponse.content;
+      let retryLastToolIdx = -1;
+      for (let i = retryBlocks.length - 1; i >= 0; i--) {
+        if ((retryBlocks[i] as { type: string }).type !== "text") { retryLastToolIdx = i; break; }
+      }
+      const retryAnswerBlocks = retryBlocks
+        .slice(retryLastToolIdx + 1)
+        .filter((b) => (b as { type: string }).type === "text");
+      finalBriefingContent = (retryAnswerBlocks.length > 0 ? retryAnswerBlocks : retryBlocks.filter((b) => (b as { type: string }).type === "text"))
+        .map((b) => (b as Anthropic.TextBlock).text)
+        .join("\n\n");
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const artifact = await createArtifact({
     taskId: task.id,
     orgId: task.orgId,
     userId: task.userId,
     title,
-    content,
+    content: finalBriefingContent,
     artifactType: "briefing",
   });
 
@@ -119,7 +187,7 @@ export async function executeBriefingTask(task: DueTask, userEmail: string): Pro
   await sendEmail(
     userEmail,
     `${title} — ${date}`,
-    artifactEmailHtml({ title, content, artifactUrl, runNumber: artifact.runNumber, date }),
+    artifactEmailHtml({ title, content: finalBriefingContent, artifactUrl, runNumber: artifact.runNumber, date }),
   );
 }
 

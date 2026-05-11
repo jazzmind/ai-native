@@ -3,108 +3,84 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Cloud,
-  Server,
-  ArrowRight,
-  ArrowLeft,
+  Rocket,
   CheckCircle,
   XCircle,
   Loader2,
-  Link2,
-  Unlink,
-  Rocket,
+  Key,
 } from "lucide-react";
 import { COACH_META } from "@/lib/coaches";
 import { CoachIcon } from "@/components/CoachIcon";
 
-type Step = "welcome" | "choose-type" | "credentials" | "validate" | "integrations" | "deploy" | "done";
-
-const TARGET_TYPES = [
-  {
-    type: "cma",
-    label: "Claude Managed Agents",
-    description: "Deploy to Anthropic's managed cloud agent platform. Requires an Anthropic API key.",
-    Icon: Cloud,
-  },
-  {
-    type: "busibox",
-    label: "Busibox",
-    description: "Deploy to a self-hosted Busibox instance with RAG, search, and bridge.",
-    Icon: Server,
-  },
-];
-
-interface McpServer {
-  name: string;
-  label: string;
-  oauthUrl: string | null;
-  description: string;
-  status: string;
-  connectionId: string | null;
-}
+type Step = "welcome" | "api-key" | "deploy" | "done";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("welcome");
-  const [targetType, setTargetType] = useState<string>("");
-  const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [hostUrl, setHostUrl] = useState("");
-  const [validating, setValidating] = useState(false);
-  const [validationResult, setValidationResult] = useState<{
-    valid: boolean;
-    error?: string;
-  } | null>(null);
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [targetId, setTargetId] = useState<string>("");
-  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResult, setDiscoverResult] = useState<{ found: number; agents: { key: string; name: string }[] } | null>(null);
 
+  // On mount, check current onboarding state and jump to the right step
   useEffect(() => {
-    if (targetId) {
-      fetch(`/api/admin/mcp?targetId=${targetId}`)
-        .then((r) => r.json())
-        .then(setMcpServers)
-        .catch(() => {});
-    }
-  }, [targetId]);
+    fetch("/api/onboarding")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.complete) {
+          router.replace("/dashboard");
+        } else if (data.hasApiKey) {
+          // Have a key — go to deploy step and immediately try to discover existing agents
+          setStep("deploy");
+          discoverExistingAgents();
+        }
+        // else: no key — show welcome → api-key flow (default)
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
-  const handleValidate = async () => {
-    setValidating(true);
-    setValidationResult(null);
+  const discoverExistingAgents = async () => {
+    setDiscovering(true);
     try {
-      const config = targetType === "cma" ? { apiKey } : { apiKey, hostUrl };
-      const res = await fetch("/api/admin/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: targetType, config }),
-      });
-      const result = await res.json();
-      setValidationResult(result);
-      if (result.valid) setStep("validate");
-    } catch (e: any) {
-      setValidationResult({ valid: false, error: e.message });
+      const res = await fetch("/api/admin/targets/discover", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.found > 0) {
+        setDiscoverResult({ found: data.found, agents: data.agents });
+        setTargetId(data.targetId);
+        // Agents already deployed — mark onboarding done and redirect
+        setStep("done");
+      }
+    } catch {
+      // discovery failure is non-fatal; fall through to manual deploy
+    } finally {
+      setDiscovering(false);
     }
-    setValidating(false);
   };
 
-  const handleCreateTarget = async () => {
+  const handleSaveApiKey = async () => {
+    setSavingKey(true);
+    setKeyError(null);
     try {
-      const config = targetType === "cma" ? { apiKey } : { apiKey, hostUrl };
-      const createRes = await fetch("/api/admin/targets", {
+      const res = await fetch("/api/settings/api-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: targetType,
-          name: name || (targetType === "cma" ? "Claude Managed Agents" : "Busibox"),
-          config,
-        }),
+        body: JSON.stringify({ key: apiKey }),
       });
-      const { target } = await createRes.json();
-      setTargetId(target.id);
-      setStep("integrations");
+      const data = await res.json();
+      if (!res.ok) {
+        setKeyError(data.error || "Failed to save API key");
+        return;
+      }
+      setStep("deploy");
     } catch (e: any) {
-      setValidationResult({ valid: false, error: `Failed to save: ${e.message}` });
+      setKeyError(e.message);
+    } finally {
+      setSavingKey(false);
     }
   };
 
@@ -112,64 +88,73 @@ export default function OnboardingPage() {
     setDeploying(true);
     setDeployError(null);
     try {
-      const res = await fetch(`/api/admin/targets/${targetId}/deploy`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setDeployError(data.error || "Deployment failed");
+      // First, try to discover existing agents so we update rather than recreate
+      let tid = targetId;
+      if (!tid) {
+        const discoverRes = await fetch("/api/admin/targets/discover", { method: "POST" });
+        const discoverData = await discoverRes.json();
+        if (discoverRes.ok && discoverData.found > 0) {
+          // Agents found and state saved — mark done without a full redeploy
+          setTargetId(discoverData.targetId);
+          setStep("done");
+          return;
+        }
+        // No existing agents — create a fresh CMA target
+        const createRes = await fetch("/api/admin/targets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "cma", name: "Claude Managed Agents", config: {} }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) {
+          setDeployError(createData.error || "Failed to create deployment target");
+          return;
+        }
+        tid = createData.target.id;
+        setTargetId(tid);
+      }
+
+      // Deploy (creates new agents or updates existing ones via agentState in the target)
+      const deployRes = await fetch(`/api/admin/targets/${tid}/deploy`, { method: "POST" });
+      const deployData = await deployRes.json();
+      if (!deployRes.ok) {
+        setDeployError(deployData.error || "Deployment failed");
       } else {
         setStep("done");
       }
     } catch (e: any) {
       setDeployError(`Deploy failed: ${e.message}`);
+    } finally {
+      setDeploying(false);
     }
-    setDeploying(false);
   };
 
-  const refreshMcp = async () => {
-    if (!targetId) return;
-    const res = await fetch(`/api/admin/mcp?targetId=${targetId}`);
-    setMcpServers(await res.json());
-  };
+  const steps: Step[] = ["api-key", "deploy", "done"];
+  const stepLabels = ["API Key", "Deploy", "Done"];
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-2xl mx-auto p-8">
 
-          {/* Step indicators */}
           {step !== "welcome" && (
             <div className="flex items-center gap-1.5 mb-8 text-[10px] font-semibold">
-              {[
-                { key: "choose-type", label: "Target" },
-                { key: "credentials", label: "Credentials" },
-                { key: "validate", label: "Validate" },
-                { key: "integrations", label: "Integrations" },
-                { key: "deploy", label: "Deploy" },
-                { key: "done", label: "Done" },
-              ].map(({ key, label }, i) => {
-                const steps: Step[] = ["choose-type", "credentials", "validate", "integrations", "deploy", "done"];
+              {steps.map((s, i) => {
                 const currentIdx = steps.indexOf(step);
-                const thisIdx = i;
-                const isActive = step === key;
-                const isDone = thisIdx < currentIdx;
+                const isActive = step === s;
+                const isDone = i < currentIdx;
                 return (
-                  <div key={key} className="flex items-center gap-1.5">
+                  <div key={s} className="flex items-center gap-1.5">
                     {i > 0 && (
                       <div className={`w-6 h-px ${isDone ? "bg-[var(--accent)]" : "bg-[var(--border)]"}`} />
                     )}
-                    <span
-                      className={
-                        isActive
-                          ? "text-[var(--accent)]"
-                          : isDone
-                          ? "text-emerald-400"
-                          : "text-[var(--text-muted)]"
-                      }
-                    >
-                      {isDone ? <CheckCircle size={10} className="inline mr-0.5" /> : null}
-                      {label}
+                    <span className={
+                      isActive ? "text-[var(--accent)]"
+                      : isDone ? "text-emerald-400"
+                      : "text-[var(--text-muted)]"
+                    }>
+                      {isDone && <CheckCircle size={10} className="inline mr-0.5" />}
+                      {stepLabels[i]}
                     </span>
                   </div>
                 );
@@ -186,9 +171,8 @@ export default function OnboardingPage() {
               </h1>
               <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto mb-8 leading-relaxed">
                 Your AI-powered advisory team. Get expert guidance on strategy, technology,
-                funding, finance, legal, and growth -- all powered by intelligent agents.
+                funding, finance, legal, and growth — all powered by intelligent agents.
               </p>
-
               <div className="grid grid-cols-4 gap-3 max-w-lg mx-auto mb-10">
                 {COACH_META.slice(0, 4).map((coach) => (
                   <div
@@ -202,12 +186,11 @@ export default function OnboardingPage() {
                   </div>
                 ))}
               </div>
-
               <p className="text-xs text-[var(--text-muted)] mb-6">
-                To get started, you need to connect a deployment backend for your agents.
+                To get started, add your Anthropic API key to deploy your advisory team.
               </p>
               <button
-                onClick={() => setStep("choose-type")}
+                onClick={() => setStep("api-key")}
                 className="px-6 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 Get Started
@@ -215,75 +198,26 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Choose Target Type */}
-          {step === "choose-type" && (
-            <div>
-              <h2 className="text-xl font-bold text-[var(--text)] mb-2">
-                Choose Deployment Target
-              </h2>
-              <p className="text-sm text-[var(--text-muted)] mb-6">
-                Where should your advisors run?
-              </p>
-              <div className="space-y-3">
-                {TARGET_TYPES.map(({ type, label, description, Icon }) => (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setTargetType(type);
-                      setStep("credentials");
-                    }}
-                    className="w-full text-left bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--accent)]/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <Icon size={24} className="text-[var(--accent)]" />
-                      <div>
-                        <div className="text-sm font-bold text-[var(--text)]">{label}</div>
-                        <div className="text-xs text-[var(--text-muted)]">{description}</div>
-                      </div>
-                      <ArrowRight size={16} className="ml-auto text-[var(--text-muted)]" />
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Credentials */}
-          {step === "credentials" && (
+          {/* API Key */}
+          {step === "api-key" && (
             <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-6">
-              <h2 className="text-lg font-bold text-[var(--text)] mb-4">
-                {targetType === "cma" ? "Claude Managed Agents" : "Busibox"} Credentials
-              </h2>
-
+              <div className="flex items-center gap-3 mb-4">
+                <Key size={20} className="text-[var(--accent)]" />
+                <h2 className="text-lg font-bold text-[var(--text)]">Add Your Anthropic API Key</h2>
+              </div>
+              <p className="text-sm text-[var(--text-muted)] mb-5">
+                Your agents run on Claude. Provide your Anthropic API key to deploy them.
+                You can find or create keys at{" "}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--accent)] hover:underline"
+                >
+                  console.anthropic.com
+                </a>.
+              </p>
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">
-                    Name (optional)
-                  </label>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={
-                      targetType === "cma" ? "My Claude Agents" : "My Busibox Instance"
-                    }
-                    className="w-full px-3 py-2 text-sm bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
-                  />
-                </div>
-
-                {targetType === "busibox" && (
-                  <div>
-                    <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">
-                      Host URL
-                    </label>
-                    <input
-                      value={hostUrl}
-                      onChange={(e) => setHostUrl(e.target.value)}
-                      placeholder="https://busibox.example.com"
-                      className="w-full px-3 py-2 text-sm bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
-                    />
-                  </div>
-                )}
-
                 <div>
                   <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider block mb-1">
                     API Key
@@ -292,182 +226,29 @@ export default function OnboardingPage() {
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     type="password"
-                    placeholder="sk-..."
+                    placeholder="sk-ant-..."
                     className="w-full px-3 py-2 text-sm bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                    onKeyDown={(e) => e.key === "Enter" && apiKey && handleSaveApiKey()}
                   />
                 </div>
 
-                {validationResult && !validationResult.valid && (
+                {keyError && (
                   <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                     <XCircle size={16} className="text-red-400 shrink-0" />
-                    <span className="text-xs text-red-400">{validationResult.error}</span>
+                    <span className="text-xs text-red-400">{keyError}</span>
                   </div>
                 )}
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setStep("choose-type")}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] text-[var(--text-muted)]"
-                  >
-                    <ArrowLeft size={14} /> Back
-                  </button>
-                  <button
-                    onClick={handleValidate}
-                    disabled={validating || !apiKey}
-                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--accent)] text-white disabled:opacity-40 flex items-center gap-2"
-                  >
-                    {validating ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" /> Validating...
-                      </>
-                    ) : (
-                      "Validate Credentials"
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Validate */}
-          {step === "validate" && (
-            <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-6">
-                <CheckCircle size={24} className="text-emerald-400" />
-                <div>
-                  <div className="text-sm font-bold text-[var(--text)]">
-                    Credentials validated
-                  </div>
-                  <div className="text-xs text-[var(--text-muted)]">
-                    Your API key is valid. Next, configure integrations.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
                 <button
-                  onClick={() => setStep("credentials")}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] text-[var(--text-muted)]"
+                  onClick={handleSaveApiKey}
+                  disabled={savingKey || !apiKey.trim()}
+                  className="w-full px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--accent)] text-white disabled:opacity-40 flex items-center justify-center gap-2"
                 >
-                  <ArrowLeft size={14} /> Back
-                </button>
-                <button
-                  onClick={handleCreateTarget}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--accent)] text-white flex items-center gap-2"
-                >
-                  Continue <ArrowRight size={14} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Integrations */}
-          {step === "integrations" && (
-            <div>
-              <h2 className="text-xl font-bold text-[var(--text)] mb-2">
-                Configure Integrations
-              </h2>
-              <p className="text-sm text-[var(--text-muted)] mb-6">
-                Connect external services to give your advisors access to your tools.
-                These are optional and can be configured later from Admin.
-              </p>
-
-              <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-5 mb-6">
-                <div className="space-y-2">
-                  {mcpServers.length === 0 ? (
-                    <p className="text-sm text-[var(--text-muted)] text-center py-4">
-                      No integrations available for this target type, or MCP servers
-                      are not yet enabled.
-                    </p>
+                  {savingKey ? (
+                    <><Loader2 size={14} className="animate-spin" /> Saving...</>
                   ) : (
-                    mcpServers.map((server) => (
-                      <div
-                        key={server.name}
-                        className="flex items-center justify-between px-4 py-3 bg-[var(--bg-tertiary)] rounded-lg"
-                      >
-                        <div>
-                          <div className="text-sm font-semibold text-[var(--text)]">
-                            {server.label}
-                          </div>
-                          <div className="text-[10px] text-[var(--text-muted)]">
-                            {server.description}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {server.status === "connected" ? (
-                            <>
-                              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
-                                <CheckCircle size={12} /> Connected
-                              </span>
-                              <button
-                                onClick={async () => {
-                                  await fetch("/api/admin/mcp", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      action: "disconnect",
-                                      targetId,
-                                      mcpName: server.name,
-                                      connectionId: server.connectionId,
-                                    }),
-                                  });
-                                  refreshMcp();
-                                }}
-                                className="text-xs text-red-400 hover:underline flex items-center gap-1"
-                              >
-                                <Unlink size={12} /> Disconnect
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-xs text-[var(--text-muted)]">
-                                Not connected
-                              </span>
-                              {server.oauthUrl ? (
-                                <button
-                                  onClick={async () => {
-                                    window.open(server.oauthUrl!, "_blank");
-                                    await fetch("/api/admin/mcp", {
-                                      method: "POST",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({
-                                        action: "connect",
-                                        targetId,
-                                        mcpName: server.name,
-                                      }),
-                                    });
-                                    refreshMcp();
-                                  }}
-                                  className="px-2 py-1 text-xs font-semibold rounded bg-[var(--accent)] text-white flex items-center gap-1"
-                                >
-                                  <Link2 size={12} /> Connect
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-[var(--text-muted)] italic">
-                                  Configure in Claude Console
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))
+                    "Save & Continue"
                   )}
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setStep("validate")}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] text-[var(--text-muted)]"
-                >
-                  <ArrowLeft size={14} /> Back
-                </button>
-                <button
-                  onClick={() => setStep("deploy")}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--accent)] text-white flex items-center gap-2"
-                >
-                  Continue to Deploy <ArrowRight size={14} />
                 </button>
               </div>
             </div>
@@ -476,64 +257,58 @@ export default function OnboardingPage() {
           {/* Deploy */}
           {step === "deploy" && (
             <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-6">
-              <h2 className="text-lg font-bold text-[var(--text)] mb-2">
-                Deploy Your Coaches
-              </h2>
-              <p className="text-sm text-[var(--text-muted)] mb-6">
-                This will deploy {COACH_META.length + 1} agents ({COACH_META.length} advisors + QA Judge) to your{" "}
-                {targetType === "cma" ? "Claude Managed Agents" : "Busibox"} instance.
-              </p>
+              <h2 className="text-lg font-bold text-[var(--text)] mb-2">Deploy Your Advisors</h2>
 
-              <div className="grid grid-cols-4 gap-2 mb-6">
-                {COACH_META.map((coach) => (
-                  <div
-                    key={coach.key}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]"
-                  >
-                    <CoachIcon name={coach.icon} size={14} className="text-[var(--accent)]" />
-                    <span className="text-xs font-semibold text-[var(--text)]">
-                      {coach.name.replace(" Coach", "")}
-                    </span>
+              {discovering ? (
+                <div className="flex items-center gap-3 py-6 text-sm text-[var(--text-muted)]">
+                  <Loader2 size={16} className="animate-spin text-[var(--accent)]" />
+                  Checking for existing agents...
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-[var(--text-muted)] mb-6">
+                    This will deploy {COACH_META.length + 1} agents ({COACH_META.length} advisors + QA Judge)
+                    to Claude Managed Agents. If you have existing agents they will be updated in place — no duplicates.
+                  </p>
+
+                  <div className="grid grid-cols-4 gap-2 mb-6">
+                    {COACH_META.map((coach) => (
+                      <div
+                        key={coach.key}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]"
+                      >
+                        <CoachIcon name={coach.icon} size={14} className="text-[var(--accent)]" />
+                        <span className="text-xs font-semibold text-[var(--text)]">
+                          {coach.name.replace(" Coach", "")}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]">
+                      <CoachIcon name="Target" size={14} className="text-[var(--text-muted)]" />
+                      <span className="text-xs font-semibold text-[var(--text-muted)]">QA Judge</span>
+                    </div>
                   </div>
-                ))}
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border)]">
-                  <CoachIcon name="Target" size={14} className="text-[var(--text-muted)]" />
-                  <span className="text-xs font-semibold text-[var(--text-muted)]">
-                    QA Judge
-                  </span>
-                </div>
-              </div>
 
-              {deployError && (
-                <div className="flex items-center gap-2 p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <XCircle size={16} className="text-red-400 shrink-0" />
-                  <span className="text-xs text-red-400">{deployError}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setStep("integrations")}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] text-[var(--text-muted)]"
-                >
-                  <ArrowLeft size={14} /> Back
-                </button>
-                <button
-                  onClick={handleDeploy}
-                  disabled={deploying}
-                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--accent)] text-white disabled:opacity-40 flex items-center gap-2"
-                >
-                  {deploying ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" /> Deploying...
-                    </>
-                  ) : (
-                    <>
-                      <Rocket size={14} /> Deploy All Agents
-                    </>
+                  {deployError && (
+                    <div className="flex items-center gap-2 p-3 mb-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <XCircle size={16} className="text-red-400 shrink-0" />
+                      <span className="text-xs text-red-400">{deployError}</span>
+                    </div>
                   )}
-                </button>
-              </div>
+
+                  <button
+                    onClick={handleDeploy}
+                    disabled={deploying}
+                    className="w-full px-4 py-2.5 text-sm font-semibold rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white disabled:opacity-40 flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {deploying ? (
+                      <><Loader2 size={14} className="animate-spin" /> Deploying...</>
+                    ) : (
+                      <><Rocket size={14} /> Deploy All Agents</>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -541,12 +316,10 @@ export default function OnboardingPage() {
           {step === "done" && (
             <div className="bg-[var(--bg-secondary)] border border-emerald-500/30 rounded-xl p-8 text-center">
               <CheckCircle size={48} className="mx-auto mb-4 text-emerald-400" />
-              <h2 className="text-xl font-bold text-[var(--text)] mb-2">
-                You're All Set
-              </h2>
+              <h2 className="text-xl font-bold text-[var(--text)] mb-2">You're All Set</h2>
               <p className="text-sm text-[var(--text-muted)] mb-8 max-w-md mx-auto">
-                Your advisors have been deployed and are ready to help. Start
-                a conversation and ask anything about your business.
+                Your advisors have been deployed and are ready to help. Start a conversation
+                and ask anything about your business.
               </p>
               <button
                 onClick={() => router.push("/dashboard")}
@@ -556,6 +329,7 @@ export default function OnboardingPage() {
               </button>
             </div>
           )}
+
         </div>
       </div>
     </div>

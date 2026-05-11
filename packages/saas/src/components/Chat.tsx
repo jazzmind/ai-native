@@ -200,6 +200,11 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
   const [streamingTurn, setStreamingTurn] = useState<TabbedTurn | null>(null);
 
   // Review suggestion state
+  const [pendingQuestion, setPendingQuestion] = useState<{
+    question: string;
+    options?: string[];
+  } | null>(null);
+
   const [reviewSuggestion, setReviewSuggestion] = useState<{
     reason: string;
     domain: string;
@@ -323,6 +328,12 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
     setStreamingTurn(null);
     setIsLearning(false);
     setReviewSuggestion(null);
+    // If there's a pending ask_user question, this message is the answer.
+    // Don't clear it yet — ea_tool_answer event will clear it once the server
+    // confirms it's routing the answer as a tool_result.
+    // (If the server never sends ea_tool_answer because the tool expired, the
+    //  pendingQuestion just becomes stale and we clear it on next send anyway.)
+    if (pendingQuestion) setPendingQuestion(null);
 
     const attachments = pendingFiles.length > 0
       ? pendingFiles.map(f => ({ fileId: f.fileId, filename: f.filename, extractedText: f.extractedText, mimeType: f.mimeType }))
@@ -554,12 +565,76 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
                 break;
               }
 
+              // ── ask_user interactivity ────────────────────────────────────────
+              case "ask_user_question":
+                setPendingQuestion({
+                  question: event.question || event.content || "",
+                  options: event.options,
+                });
+                break;
+
+              case "ea_tool_answer":
+                // The user's answer is being submitted as a tool_result — clear the prompt
+                setPendingQuestion(null);
+                break;
+
+              // ── Coordinator thread events ──────────────────────────────────────
+              case "ea_thread_created":
+                addActivityItem("ea", "tool_use", { tool: `Delegating to sub-agent…` });
+                break;
+
+              case "ea_thread_message":
+                // Sub-agent messages are captured in the EA's main response stream via tool_result
+                break;
+
+              case "ea_thread_done":
+                addActivityItem("ea", "tool_result", { tool: "sub-agent", result: "Complete" });
+                break;
+
+              // ── Outcome/rubric events ──────────────────────────────────────────
+              case "outcome_start":
+                addActivityItem(event.coachKey || "ea", "tool_use", { tool: `Evaluating quality (iteration ${event.iteration ?? 1})…` });
+                break;
+
+              case "outcome_iteration":
+                addActivityItem(event.coachKey || "ea", "tool_use", {
+                  tool: `Revising… score: ${event.score ?? "n/a"} — ${event.feedback ?? ""}`,
+                });
+                break;
+
+              case "outcome_pass":
+                addActivityItem(event.coachKey || "ea", "tool_result", {
+                  tool: "quality-check",
+                  result: `Passed (score: ${event.score ?? "n/a"})`,
+                });
+                break;
+
+              case "outcome_fail":
+                addActivityItem(event.coachKey || "ea", "tool_result", {
+                  tool: "quality-check",
+                  result: `Failed: ${event.content ?? ""}`,
+                });
+                break;
+
+              // ─────────────────────────────────────────────────────────────────
+
               case "review_suggestion":
                 setReviewSuggestion({
                   reason: event.reason,
                   domain: event.domain,
                   urgency: event.urgency,
                 });
+                break;
+
+              case "ea_memory_saved":
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `memory-${Date.now()}-${Math.random()}`,
+                    role: "system" as const,
+                    content: `Memory saved: ${event.title} (${event.memoryType})`,
+                  },
+                ]);
                 break;
 
               case "task_created":
@@ -809,6 +884,27 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
         </div>
       )}
 
+      {pendingQuestion && (
+        <div className="mx-4 mb-2 p-3 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/5">
+          <p className="text-xs font-semibold text-[var(--accent)] mb-1.5">Chief of Staff is asking:</p>
+          <p className="text-sm text-[var(--text)] mb-2">{pendingQuestion.question}</p>
+          {pendingQuestion.options && pendingQuestion.options.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {pendingQuestion.options.map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => sendMessage(opt)}
+                  disabled={isStreaming}
+                  className="px-3 py-1 text-xs rounded-lg border border-[var(--accent)]/50 text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors disabled:opacity-40"
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="p-4 border-t border-[var(--border)]">
         <div className="mb-3 flex flex-col gap-2">
           <ModeSelector selected={selectedMode} onSelect={setSelectedMode} />
@@ -825,7 +921,7 @@ export function Chat({ conversationId, onConversationCreated, projectId }: ChatP
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={placeholderText}
+            placeholder={pendingQuestion ? "Type your answer…" : placeholderText}
             rows={1}
             className="flex-1 bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-[var(--accent)] placeholder:text-[var(--text-muted)]"
             disabled={isStreaming}

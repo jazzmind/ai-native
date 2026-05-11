@@ -49,7 +49,7 @@ export async function createConversation(
   title: string,
   userId: string,
   projectId: string,
-  orgId = ''
+  orgId: string
 ): Promise<Conversation> {
   const db = getDb();
   await db.insert(conversations).values({

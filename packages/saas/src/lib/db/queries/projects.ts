@@ -27,7 +27,7 @@ function toProject(row: any): Project {
   };
 }
 
-export async function createProject(userId: string, name: string, description = '', orgId = ''): Promise<Project> {
+export async function createProject(userId: string, name: string, description = '', orgId: string): Promise<Project> {
   const db = getDb();
   const id = uuidv4();
   await db.insert(projects).values({
@@ -90,7 +90,7 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
     .where(and(eq(projects.id, id), eq(projects.userId, userId)));
 }
 
-export async function getOrCreateDefaultProject(userId: string, orgId = ''): Promise<Project> {
+export async function getOrCreateDefaultProject(userId: string, orgId: string): Promise<Project> {
   const db = getDb();
   const [existing] = await db
     .select()

@@ -12,6 +12,14 @@ import { CopyButtons } from "./CopyButtons";
 import { RequestReviewDialog } from "./RequestReviewDialog";
 import { MultipleChoiceCard } from "./MultipleChoiceCard";
 import { splitContentAndChoices } from "@/lib/parse-choices";
+
+/** Strip EA block syntax (:::memory, :::dispatch, :::task, :::skill, etc.) from display text. */
+function stripEaBlocksFromDisplay(text: string): string {
+  return text
+    .replace(/:::(dispatch|memory|expert_request|task)\n[\s\S]*?:::/g, "")
+    .replace(/:::skill [^\n]+\n[\s\S]*?:::/g, "")
+    .trim();
+}
 import type { CoachIconName } from "@/lib/coaches";
 import type { ActivityItem } from "./Chat";
 
@@ -233,12 +241,13 @@ function ChoicesAwareContent({
   onSendMessage?: (message: string) => void;
   isStreaming?: boolean;
 }) {
-  const { textParts, choiceBlocks } = splitContentAndChoices(content);
+  const displayContent = stripEaBlocksFromDisplay(content);
+  const { textParts, choiceBlocks } = splitContentAndChoices(displayContent);
 
   if (choiceBlocks.length === 0) {
     return (
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-        {content}
+        {displayContent}
       </ReactMarkdown>
     );
   }

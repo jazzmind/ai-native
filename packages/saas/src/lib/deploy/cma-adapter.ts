@@ -3,6 +3,26 @@ import type { DeployAdapter, CoachDefinition, DeployResult, TargetStatus } from 
 
 const ENVIRONMENT_NAME = "coach-env";
 
+// Canonical base names → key mapping for all known coaches. Used for discovery.
+const COACH_BASE_NAMES: Record<string, string> = {
+  "QA Judge": "qa-judge",
+  "Chief of Staff": "ea",
+  "Technology Coach": "technology",
+  "Founder Coach": "founder",
+  "Strategy Coach": "strategy",
+  "Funding Coach": "funding",
+  "Finance Coach": "finance",
+  "Legal Coach": "legal",
+  "Growth Coach": "growth",
+  "MK Coach": "mk",
+};
+
+export interface DiscoveredState {
+  agents: Record<string, { id: string; version: number; name: string }>;
+  environmentId?: string;
+  matchedCount: number;
+}
+
 function buildDatePreamble(): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
@@ -17,6 +37,63 @@ function buildDatePreamble(): string {
 
 export class CMAAdapter implements DeployAdapter {
   readonly type = "cma";
+
+  async discover(apiKey: string, orgId?: string): Promise<DiscoveredState> {
+    const client = new Anthropic({ apiKey });
+    const agents: DiscoveredState["agents"] = {};
+
+    // Build lookup maps: org-scoped name (preferred) and bare name (migration fallback)
+    const scopedNameToKey: Record<string, string> = {};
+    const bareNameToKey: Record<string, string> = { ...COACH_BASE_NAMES };
+    if (orgId) {
+      const { orgHash } = await import("./coach-loader");
+      const hash = orgHash(orgId);
+      for (const [baseName, key] of Object.entries(COACH_BASE_NAMES)) {
+        scopedNameToKey[`${baseName} [${hash}]`] = key;
+      }
+    }
+
+    try {
+      // List all agents, paginating through results
+      let after: string | undefined;
+      const allAgents: any[] = [];
+      while (true) {
+        const page: any = await (client.beta as any).agents.list({ limit: 100, ...(after ? { after } : {}) });
+        const items: any[] = page.data ?? page.agents ?? [];
+        allAgents.push(...items);
+        if (!page.has_more || items.length === 0) break;
+        after = items[items.length - 1].id;
+      }
+
+      for (const agent of allAgents) {
+        if (agent.archived_at) continue; // skip archived
+        // Prefer org-scoped match; fall back to bare name for migration
+        const key = scopedNameToKey[agent.name] ?? bareNameToKey[agent.name];
+        if (key && !agents[key]) {
+          // If there are multiple matches for a key (e.g. old + new name), prefer scoped
+          const isScoped = !!scopedNameToKey[agent.name];
+          if (isScoped || !agents[key]) {
+            agents[key] = { id: agent.id, version: agent.version, name: agent.name };
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[cma-discover] Failed to list agents: ${e.message}`);
+    }
+
+    // Find the environment named "coach-env"
+    let environmentId: string | undefined;
+    try {
+      const envPage: any = await (client.beta as any).environments.list({ limit: 100 });
+      const envs: any[] = envPage.data ?? envPage.environments ?? [];
+      const env = envs.find((e: any) => !e.archived_at && e.name === ENVIRONMENT_NAME);
+      if (env) environmentId = env.id;
+    } catch {
+      // environments listing not critical
+    }
+
+    return { agents, environmentId, matchedCount: Object.keys(agents).length };
+  }
 
   async validate(config: Record<string, any>): Promise<{ valid: boolean; error?: string }> {
     const apiKey = config.apiKey;
@@ -80,9 +157,14 @@ export class CMAAdapter implements DeployAdapter {
       }
     }
 
-    // Deploy base agents first (no callable deps), then ones with callable
-    const baseCoaches = coaches.filter(c => !c.callable || c.callable.length === 0);
-    const dependentCoaches = coaches.filter(c => c.callable && c.callable.length > 0);
+    // Coaches with neither callable nor multiagent are "base" and deploy first.
+    // Coaches with callable or multiagent depend on others and deploy second.
+    const baseCoaches = coaches.filter(c =>
+      (!c.callable || c.callable.length === 0) && !c.multiagent
+    );
+    const dependentCoaches = coaches.filter(c =>
+      (c.callable && c.callable.length > 0) || c.multiagent
+    );
 
     console.log(`[cma-deploy] Base coaches: ${baseCoaches.map(c => c.key).join(", ")}`);
     console.log(`[cma-deploy] Dependent coaches: ${dependentCoaches.map(c => c.key).join(", ")}`);
@@ -92,17 +174,42 @@ export class CMAAdapter implements DeployAdapter {
     for (const coach of [...baseCoaches, ...dependentCoaches]) {
       try {
         const systemPrompt = buildDatePreamble() + coach.instructions;
-        const tools: any[] = [{ type: "agent_toolset_20260401" }];
+        const tools: any[] = [
+          { type: "agent_toolset_20260401" },
+          {
+            name: "ask_user",
+            description:
+              "Ask the user a clarifying question and wait for their answer before continuing. Use this when you need specific input from the user that you cannot infer — for example, confirming preferences, getting authorization, or collecting a required value. Provide clear, specific questions. Optionally provide a short list of options to make answering easy.",
+            input_schema: {
+              type: "object",
+              properties: {
+                question: {
+                  type: "string",
+                  description: "The specific question to ask the user.",
+                },
+                options: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Optional short list of suggested answer choices (2-4 items). Omit for open-ended questions.",
+                },
+              },
+              required: ["question"],
+            },
+          },
+        ];
         const existing = existingState.agents?.[coach.key];
         console.log(`[cma-deploy] ${coach.key}: existing=${existing ? existing.id + " v" + existing.version : "NEW"}`);
 
+        const skills = (coach.skills || []).filter(s => s.skill_id);
+
+        // Build callable_agents for coaches that use the single-thread callable pattern (e.g. coaches -> qa-judge)
         let callableAgents: any[] | undefined;
-        if (coach.callable && coach.callable.length > 0) {
+        if (!coach.multiagent && coach.callable && coach.callable.length > 0) {
           callableAgents = [];
           for (const depKey of coach.callable) {
             const dep = existingState.agents?.[depKey] || agents.find(a => a.key === depKey);
             if (dep) {
-              const depId = dep.agentId || dep.id;
+              const depId = dep.agentId || (dep as any).id;
               const depVersion = dep.version;
               if (depId && depVersion) {
                 callableAgents.push({ type: "agent", id: depId, version: depVersion });
@@ -111,12 +218,29 @@ export class CMAAdapter implements DeployAdapter {
           }
         }
 
-        const skills = (coach.skills || []).filter(s => s.skill_id);
+        // Build multiagent coordinator config for the EA
+        let multiagentConfig: any | undefined;
+        if (coach.multiagent?.type === "coordinator" && coach.multiagent.agents.length > 0) {
+          const rosterAgents: any[] = [];
+          for (const agentKey of coach.multiagent.agents) {
+            const dep = existingState.agents?.[agentKey] || agents.find(a => a.key === agentKey);
+            if (dep) {
+              const depId = dep.agentId || (dep as any).id;
+              if (depId) {
+                rosterAgents.push({ type: "agent", id: depId });
+              }
+            }
+          }
+          if (rosterAgents.length > 0) {
+            multiagentConfig = { type: "coordinator", agents: rosterAgents };
+          }
+        }
 
         let agent: any;
         if (existing) {
           const updateParams: any = {
             version: existing.version,
+            name: coach.name, // renames bare-name agents to org-scoped on update
             system: systemPrompt,
             description: coach.description,
             tools,
@@ -124,6 +248,9 @@ export class CMAAdapter implements DeployAdapter {
           };
           if (callableAgents && callableAgents.length > 0) {
             updateParams.callable_agents = callableAgents;
+          }
+          if (multiagentConfig) {
+            updateParams.multiagent = multiagentConfig;
           }
           agent = await (client.beta as any).agents.update(existing.id, updateParams);
         } else {
@@ -137,6 +264,9 @@ export class CMAAdapter implements DeployAdapter {
           };
           if (callableAgents && callableAgents.length > 0) {
             createParams.callable_agents = callableAgents;
+          }
+          if (multiagentConfig) {
+            createParams.multiagent = multiagentConfig;
           }
           agent = await (client.beta as any).agents.create(createParams);
         }

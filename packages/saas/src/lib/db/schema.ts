@@ -189,6 +189,29 @@ export const eaMemory = pgTable('ea_memory', {
 }));
 
 // ══════════════════════════════════════════════
+// Channel Bindings (Telegram, WhatsApp, Signal)
+// ══════════════════════════════════════════════
+
+export const channelBindings = pgTable('channel_bindings', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  orgId: text('org_id').notNull(),
+  channelType: text('channel_type', { enum: ['telegram', 'whatsapp', 'signal'] }).notNull(),
+  externalId: text('external_id'),
+  displayName: text('display_name'),
+  linkCode: text('link_code'),
+  linkExpiresAt: timestamp('link_expires_at'),
+  verifiedAt: timestamp('verified_at'),
+  bridgeConversationId: text('bridge_conversation_id'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (t) => ({
+  uniqChannelUser: unique().on(t.userId, t.channelType),
+  uniqExternalId: unique().on(t.channelType, t.externalId),
+}));
+
+// ══════════════════════════════════════════════
 // Notifications
 // ══════════════════════════════════════════════
 
@@ -196,7 +219,7 @@ export const notifications = pgTable('notifications', {
   id: text('id').primaryKey(),
   orgId: text('org_id').notNull(),
   userId: text('user_id').notNull(),
-  type: text('type', { enum: ['agent_message', 'review_complete', 'task_due'] }).notNull(),
+  type: text('type', { enum: ['agent_message', 'review_complete', 'task_due', 'bridge_message'] }).notNull(),
   title: text('title').notNull(),
   body: text('body'),
   conversationId: text('conversation_id'),
@@ -556,6 +579,34 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   metadata: jsonb('metadata').notNull().default({}),
   // tsv is maintained by a DB trigger set up in the push migration
   tsv: tsvector('tsv'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// ══════════════════════════════════════════════
+// Agent Skills (custom skills uploaded via API)
+// ══════════════════════════════════════════════
+
+/**
+ * Tracks custom skills uploaded to Anthropic via the beta.skills API and
+ * their assignment to specific coaches for a given org.
+ */
+export const agentSkills = pgTable('agent_skills', {
+  id: text('id').primaryKey(),
+  orgId: text('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  /** Anthropic skill ID returned by beta.skills.create */
+  skillId: text('skill_id').notNull(),
+  /** Latest version string e.g. "1" or "latest" */
+  version: text('version').notNull().default('latest'),
+  /** Human-readable name shown in the UI */
+  name: text('name').notNull(),
+  /** Optional description */
+  description: text('description').notNull().default(''),
+  /** skill type — always "custom" for user-uploaded skills */
+  skillType: text('skill_type').notNull().default('custom'),
+  /** JSON array of coach keys this skill is assigned to, e.g. ["strategy","funding"] */
+  assignedCoaches: jsonb('assigned_coaches').notNull().default([]),
+  createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

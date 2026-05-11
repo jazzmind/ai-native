@@ -28,12 +28,13 @@ interface AnalysisResult {
 
 export async function checkAndProposeBehaviorRevisions(
   userId: string,
-  projectId: string
+  projectId: string,
+  orgId: string
 ): Promise<AnalysisResult[]> {
   const results: AnalysisResult[] = [];
 
   for (const coach of COACH_META) {
-    const result = await analyzeCoachFeedback(userId, projectId, coach.key);
+    const result = await analyzeCoachFeedback(userId, projectId, coach.key, orgId);
     if (result.shouldPropose) {
       results.push(result);
     }
@@ -45,7 +46,8 @@ export async function checkAndProposeBehaviorRevisions(
 async function analyzeCoachFeedback(
   userId: string,
   projectId: string,
-  coachKey: string
+  coachKey: string,
+  orgId: string
 ): Promise<AnalysisResult> {
   const noProposal: AnalysisResult = { shouldPropose: false, coachKey };
 
@@ -138,7 +140,8 @@ Analyze the pattern and propose a behavioral directive.`,
         userId,
         parsed.analysis,
         parsed.directive,
-        feedbackIds
+        feedbackIds,
+        orgId
       );
 
       return {

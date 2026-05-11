@@ -189,5 +189,19 @@ export {
   setAppSetting,
 } from './queries/app-settings';
 
+// Channel Bindings (Telegram, WhatsApp, Signal bridge)
+export {
+  createLinkCode,
+  verifyLinkCode,
+  lookupBinding,
+  getUserBindings,
+  getUserBinding,
+  removeBinding,
+  getVerifiedExternalId,
+  setBridgeConversationId,
+  type ChannelBinding,
+  type ChannelType,
+} from './queries/channel-bindings';
+
 // Schema (for direct access when needed)
 export * as schema from './schema';

@@ -33,6 +33,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3", "@anthropic-ai/sdk"],
   transpilePackages: ["@ai-native/core"],
+  // Include advisor INSTRUCTIONS.md files in the Vercel deployment bundle.
+  // These live outside packages/saas so Next.js won't trace them automatically.
+  outputFileTracingIncludes: {
+    "/api/admin/targets/[id]/deploy": ["../../advisors/**/INSTRUCTIONS.md"],
+    "/api/admin/targets/discover": ["../../advisors/**/INSTRUCTIONS.md"],
+  },
   async headers() {
     return [
       {

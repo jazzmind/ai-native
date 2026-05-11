@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
-import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
 import { checkAndProposeBehaviorRevisions } from "@/lib/behavior-analysis";
 
 export async function POST(req: NextRequest) {
   let user;
+  let orgId: string;
   try {
-    user = await getRequiredUser();
+    ({ user, org: { id: orgId } } = await getRequiredUserAndOrg());
   } catch (err) {
     return handleAuthError(err);
   }
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "projectId is required" }, { status: 400 });
   }
 
-  const results = await checkAndProposeBehaviorRevisions(user.id, projectId);
+  const results = await checkAndProposeBehaviorRevisions(user.id, projectId, orgId);
   const proposals = results.filter((r) => r.shouldPropose);
 
   return Response.json({

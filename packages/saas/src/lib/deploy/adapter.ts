@@ -7,7 +7,9 @@ export interface CoachDefinition {
   instructions: string;
   callable?: string[];
   mcp?: string[];
-  skills?: { type: string; skill_id: string }[];
+  skills?: { type: string; skill_id: string; version?: string }[];
+  /** When set, deploy this agent as a multiagent coordinator over the listed agent keys. */
+  multiagent?: { type: "coordinator"; agents: string[] };
 }
 
 export interface AgentDeployResult {

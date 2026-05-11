@@ -74,13 +74,14 @@ export async function setToolTrust(
   userId: string,
   projectId: string,
   toolPattern: string,
-  trustLevel: 'auto' | 'confirm' | 'blocked'
+  trustLevel: 'auto' | 'confirm' | 'blocked',
+  orgId: string
 ): Promise<void> {
   const db = getDb();
   const id = uuidv4();
   await db
     .insert(toolTrust)
-    .values({ id, userId, projectId, toolPattern, trustLevel, orgId: '' })
+    .values({ id, userId, projectId, toolPattern, trustLevel, orgId })
     .onConflictDoUpdate({
       target: [toolTrust.userId, toolTrust.projectId, toolTrust.toolPattern],
       set: { trustLevel },

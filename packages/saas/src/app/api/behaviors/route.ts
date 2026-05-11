@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getRequiredUser, handleAuthError } from "@/lib/auth";
+import { getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
 import {
   createBehavior,
   listBehaviors,
@@ -13,7 +13,7 @@ import {
 export async function GET(req: NextRequest) {
   let user;
   try {
-    user = await getRequiredUser();
+    ({ user } = await getRequiredUserAndOrg());
   } catch (err) {
     return handleAuthError(err);
   }
@@ -39,8 +39,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   let user;
+  let orgId: string;
   try {
-    user = await getRequiredUser();
+    ({ user, org: { id: orgId } } = await getRequiredUserAndOrg());
   } catch (err) {
     return handleAuthError(err);
   }
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
       if (!coachKey || !projectId || !directive) {
         return Response.json({ error: "coachKey, projectId, and directive are required" }, { status: 400 });
       }
-      const behavior = await createBehavior(coachKey, projectId, user.id, directive, "manual");
+      const behavior = await createBehavior(coachKey, projectId, user.id, directive, "manual", orgId);
       return Response.json(behavior);
     }
 
@@ -86,7 +87,7 @@ export async function POST(req: NextRequest) {
       }
       await updateRevisionStatus(revisionId, user.id, "approved");
       if (directive && revProjectId && revCoachKey) {
-        await createBehaviorFromRevision(revCoachKey, revProjectId, user.id, directive, "ai-revision");
+        await createBehaviorFromRevision(revCoachKey, revProjectId, user.id, directive, "ai-revision", orgId);
       }
       return Response.json({ ok: true });
     }

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getTarget, updateTargetStatus } from "@/lib/config-store";
 import { getAdapter } from "@/lib/deploy";
-import { loadCoachDefinitions } from "@/lib/deploy/coach-loader";
+import { loadCoachDefinitionsWithCustomSkills } from "@/lib/deploy/coach-loader";
 import { getRequiredUserAndOrg, handleAuthError } from "@/lib/auth";
 import { resetDeployState } from "@/lib/coaches-server";
 import { getApiKey } from "@/lib/db/queries/api-keys";
@@ -27,7 +27,7 @@ export async function POST(
   await updateTargetStatus(id, "deploying");
 
   try {
-    const coaches = loadCoachDefinitions();
+    const coaches = await loadCoachDefinitionsWithCustomSkills(org.id, user.id);
     if (coaches.length === 0) {
       await updateTargetStatus(id, "error");
       return Response.json({ ok: false, error: "No coach definitions found. Check that INSTRUCTIONS.md files exist." }, { status: 500 });

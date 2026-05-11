@@ -4,6 +4,7 @@ import { getDueTasks, markTaskTriggered, rescheduleTask } from "@/lib/db/queries
 import { createNotification } from "@/lib/db/queries/notifications";
 import { addMessage } from "@/lib/db";
 import { COACH_META } from "@/lib/coaches";
+import { dispatchNotificationToChannels } from "@/lib/bridge/notification-dispatcher";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
           await addMessage(task.conversationId, "assistant", messageText, task.coachKey, null);
         }
 
-        await createNotification({
+        const notification = await createNotification({
           orgId: task.orgId,
           userId: task.userId,
           type: 'agent_message',
@@ -77,6 +78,14 @@ export async function GET(req: NextRequest) {
           body: messageText.slice(0, 200),
           conversationId: task.conversationId || undefined,
         });
+
+        // Push to linked external channels (Telegram, etc.) — non-blocking
+        dispatchNotificationToChannels({
+          userId: task.userId,
+          title: notification.title,
+          body: notification.body,
+          conversationId: notification.conversationId,
+        }).catch((err) => console.error("[heartbeat] dispatch error:", err));
 
         if (task.repeatInterval) {
           const intervalMs = parseRepeatInterval(task.repeatInterval);

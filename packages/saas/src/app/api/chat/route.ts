@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import Anthropic from "@anthropic-ai/sdk";
 import { routeMessage } from "@/lib/router";
-import { getOrCreateSession, streamCoachResponse } from "@/lib/session-manager";
+import { getOrCreateSession, streamCoachResponse, resumeWithToolResult } from "@/lib/session-manager";
 import {
   addMessage,
   createConversation,
@@ -26,10 +26,37 @@ import { loadModeTemplate } from "@/lib/modes-server";
 import { trackEvent, Events } from "@/lib/usage-tracking";
 import { detectReviewNeed } from "@/lib/review-detector";
 import { parseTaskBlocks } from "@/lib/parse-tasks";
-import { parseDispatchBlocks, parseMemoryBlocks, parseExpertRequests, stripEaBlocks } from "@/lib/parse-dispatch";
+import { parseMemoryBlocks, parseExpertRequests, stripEaBlocks } from "@/lib/parse-dispatch";
+import { getCurrentTimeContext } from "@/lib/time-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+// ── ask_user pending state ────────────────────────────────────────────────────
+// Keyed by conversationId. When the EA calls ask_user, we store the pending
+// tool call here. The NEXT message from the user on this conversation is routed
+// as a tool_result rather than a fresh user.message.
+interface PendingToolCall {
+  toolUseId: string;
+  sessionId: string;
+  coachKey: string;
+  question: string;
+  options?: string[];
+  expiresAt: number;
+}
+const pendingToolCalls = new Map<string, PendingToolCall>();
+const TOOL_CALL_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function getPendingToolCall(convId: string): PendingToolCall | null {
+  const pending = pendingToolCalls.get(convId);
+  if (!pending) return null;
+  if (Date.now() > pending.expiresAt) {
+    pendingToolCalls.delete(convId);
+    return null;
+  }
+  return pending;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function formatBehaviorDirectives(directives: { directive: string }[]): string {
   if (directives.length === 0) return "";
@@ -90,7 +117,7 @@ export async function POST(req: NextRequest) {
     convId = uuidv4();
     isNewConversation = true;
     const title = message.slice(0, 80) + (message.length > 80 ? "..." : "");
-    await createConversation(convId, title, user.id, projectId);
+    await createConversation(convId, title, user.id, projectId, orgId);
     trackEvent(orgId, user.id, Events.CONVERSATION_CREATED, { conversationId: convId, projectId });
   }
 
@@ -199,6 +226,7 @@ export async function POST(req: NextRequest) {
 
       const contextParts: string[] = [];
       contextParts.push(`[MODE: ${activeMode.toUpperCase()}]\n${modeTemplate}`);
+      contextParts.push(getCurrentTimeContext());
 
       const expertContext = formatExpertContext(expertComments);
       if (expertContext) contextParts.push(expertContext);
@@ -224,72 +252,153 @@ export async function POST(req: NextRequest) {
       const activityProvider = getActivityProvider();
       const coachResponses = new Map<string, string>();
 
-      // ── EA ORCHESTRATION PATH ───────────────────────────────────────────────
+      // ── EA ORCHESTRATION PATH (native coordinator) ──────────────────────────
       if (isEaOrchestration) {
         const eaCoach = coaches[0];
 
-        // Load EA memory to provide context
-        let eaMemoryContext = "";
+        // Check if this message is answering a pending ask_user tool call
+        const pendingCall = getPendingToolCall(convId!);
+
+        let eaFullResponse = "";
+
         try {
-          const memoryEntries = await listEaMemory(user.id, projectId);
-          const formatted = formatEaMemoryForPrompt(memoryEntries);
-          if (formatted) {
-            eaMemoryContext = `\n\n[EA Memory — Your Stored Templates & Context]\n${formatted}`;
-          }
-        } catch {
-          // non-critical
-        }
+          if (pendingCall) {
+            // Resume the paused session with the user's answer as a tool_result
+            pendingToolCalls.delete(convId!);
+            send({ type: "ea_tool_answer", question: pendingCall.question });
 
-        // Phase 1: EA planning turn
-        send({ type: "ea_planning_start", coachKey: "ea" });
+            for await (const event of resumeWithToolResult(
+              pendingCall.sessionId,
+              pendingCall.toolUseId,
+              message,
+              eaCoach.key,
+              anthropicKey
+            )) {
+              switch (event.type) {
+                case "text":
+                  eaFullResponse += event.content;
+                  send({ type: "text", content: event.content, coachKey: "ea" });
+                  break;
+                case "ask_user_question":
+                  pendingToolCalls.set(convId!, {
+                    toolUseId: event.toolUseId!,
+                    sessionId: pendingCall.sessionId,
+                    coachKey: eaCoach.key,
+                    question: event.question!,
+                    options: event.options,
+                    expiresAt: Date.now() + TOOL_CALL_TTL_MS,
+                  });
+                  send({ type: "ask_user_question", question: event.question, options: event.options, coachKey: "ea" });
+                  break;
+                case "tool_use":
+                  send({ type: "tool_use", tool: event.content, coachKey: "ea" });
+                  activityProvider.add(user.id, convId!, "ea", "tool_use", { tool: event.content, input: event.toolInput }, orgId);
+                  break;
+                case "usage":
+                  send({ type: "usage", coachKey: "ea", usage: event.usage });
+                  activityProvider.add(user.id, convId!, "ea", "usage", event.usage as Record<string, unknown>, orgId);
+                  break;
+                case "thinking":
+                  send({ type: "thinking", coachKey: "ea" });
+                  break;
+                case "error":
+                  send({ type: "error", content: event.content, coachKey: "ea" });
+                  break;
+              }
+            }
+          } else {
+            // Normal turn: load context + send as a fresh user.message
+            let eaMemoryContext = "";
+            try {
+              const memoryEntries = await listEaMemory(user.id, projectId);
+              const formatted = formatEaMemoryForPrompt(memoryEntries);
+              if (formatted) {
+                eaMemoryContext = `\n\n[EA Memory — Your Stored Templates & Context]\n${formatted}`;
+              }
+            } catch {
+              // non-critical
+            }
 
-        const eaFullContext = [...contextParts];
-        if (eaMemoryContext) eaFullContext.push(eaMemoryContext);
-        const eaBehaviors = await getActiveBehaviors(user.id, projectId, "ea");
-        const eaBehaviorContext = formatBehaviorDirectives(eaBehaviors);
-        if (eaBehaviorContext) eaFullContext.push(eaBehaviorContext);
+            const eaFullContext = [...contextParts];
+            if (eaMemoryContext) eaFullContext.push(eaMemoryContext);
+            const eaBehaviors = await getActiveBehaviors(user.id, projectId, "ea");
+            const eaBehaviorContext = formatBehaviorDirectives(eaBehaviors);
+            if (eaBehaviorContext) eaFullContext.push(eaBehaviorContext);
 
-        const eaPlanningMessage = eaFullContext.join("\n\n") + `\n\n${message}`;
+            const eaMessage = eaFullContext.join("\n\n") + `\n\n${message}`;
+            const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey, user.id);
 
-        let eaPlanningResponse = "";
-        try {
-          const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey, user.id);
-          for await (const event of streamCoachResponse(sessionId, eaPlanningMessage, eaCoach.key, anthropicKey)) {
-            switch (event.type) {
-              case "text":
-                eaPlanningResponse += event.content;
-                send({ type: "text", content: event.content, coachKey: "ea" });
-                break;
-              case "tool_use":
-                send({ type: "tool_use", tool: event.content, coachKey: "ea" });
-                activityProvider.add(user.id, convId!, "ea", "tool_use", { tool: event.content, input: event.toolInput }, orgId);
-                break;
-              case "tool_result":
-                send({ type: "tool_result", content: event.content, coachKey: "ea", toolName: event.toolName });
-                break;
-              case "thinking":
-                send({ type: "thinking", coachKey: "ea" });
-                break;
-              case "usage":
-                send({ type: "usage", coachKey: "ea", usage: event.usage });
-                activityProvider.add(user.id, convId!, "ea", "usage", event.usage as Record<string, unknown>, orgId);
-                break;
-              case "context_compacted":
-                send({ type: "context_compacted", coachKey: "ea" });
-                break;
-              case "error":
-                send({ type: "error", content: event.content, coachKey: "ea" });
-                break;
+            for await (const event of streamCoachResponse(sessionId, eaMessage, eaCoach.key, anthropicKey)) {
+              switch (event.type) {
+                case "text":
+                  eaFullResponse += event.content;
+                  send({ type: "text", content: event.content, coachKey: "ea" });
+                  break;
+                case "ask_user_question":
+                  // Agent wants to pause and ask a question — store pending state and surface to client
+                  pendingToolCalls.set(convId!, {
+                    toolUseId: event.toolUseId!,
+                    sessionId,
+                    coachKey: eaCoach.key,
+                    question: event.question!,
+                    options: event.options,
+                    expiresAt: Date.now() + TOOL_CALL_TTL_MS,
+                  });
+                  send({ type: "ask_user_question", question: event.question, options: event.options, coachKey: "ea" });
+                  break;
+                case "tool_use":
+                  send({ type: "tool_use", tool: event.content, coachKey: "ea" });
+                  activityProvider.add(user.id, convId!, "ea", "tool_use", { tool: event.content, input: event.toolInput }, orgId);
+                  break;
+                case "tool_result":
+                  send({ type: "tool_result", content: event.content, coachKey: "ea", toolName: event.toolName });
+                  break;
+                case "thinking":
+                  send({ type: "thinking", coachKey: "ea" });
+                  break;
+                case "usage":
+                  send({ type: "usage", coachKey: "ea", usage: event.usage });
+                  activityProvider.add(user.id, convId!, "ea", "usage", event.usage as Record<string, unknown>, orgId);
+                  break;
+                case "context_compacted":
+                  send({ type: "context_compacted", coachKey: "ea" });
+                  break;
+                case "error":
+                  send({ type: "error", content: event.content, coachKey: "ea" });
+                  break;
+                case "thread_created":
+                  send({ type: "ea_thread_created", threadId: event.threadId, agentId: event.threadAgentId });
+                  break;
+                case "thread_message":
+                  send({ type: "ea_thread_message", content: event.content, threadId: event.threadId });
+                  break;
+                case "thread_done":
+                  send({ type: "ea_thread_done", threadId: event.threadId });
+                  break;
+                case "outcome_start":
+                  send({ type: "outcome_start", coachKey: "ea", iteration: event.iteration });
+                  break;
+                case "outcome_iteration":
+                  send({ type: "outcome_iteration", coachKey: "ea", iteration: event.iteration, score: event.score, feedback: event.feedback });
+                  break;
+                case "outcome_pass":
+                  send({ type: "outcome_pass", coachKey: "ea", score: event.score });
+                  break;
+                case "outcome_fail":
+                  send({ type: "outcome_fail", coachKey: "ea", content: event.content });
+                  break;
+              }
             }
           }
         } catch (err) {
           send({ type: "error", content: String(err), coachKey: "ea" });
         }
 
-        send({ type: "ea_planning_done", coachKey: "ea" });
+        // Strip :::block syntax before storing or sending downstream
+        const cleanResponse = stripEaBlocks(eaFullResponse);
 
-        // Persist EA memory blocks
-        const memoryBlocks = parseMemoryBlocks(eaPlanningResponse);
+        // Persist EA memory blocks from the coordinator's response
+        const memoryBlocks = parseMemoryBlocks(eaFullResponse);
         for (const block of memoryBlocks) {
           try {
             await upsertEaMemory({
@@ -302,149 +411,20 @@ export async function POST(req: NextRequest) {
               content: block.content,
             });
             send({ type: "ea_memory_saved", key: block.key, title: block.title, memoryType: block.type });
-          } catch {
-            // non-critical
+          } catch (memErr) {
+            console.error("[chat/ea] Failed to persist memory block:", block.key, memErr);
           }
         }
 
-        // Emit expert request suggestions
-        const expertRequests = parseExpertRequests(eaPlanningResponse);
+        // Emit expert request suggestions parsed from the EA response
+        const expertRequests = parseExpertRequests(eaFullResponse);
         for (const req of expertRequests) {
           send({ type: "ea_expert_request", domain: req.domain, title: req.title, question: req.question, budgetHint: req.budgetHint });
         }
 
-        // Phase 2: Dispatch to advisors if EA requested it
-        const dispatchBlocks = parseDispatchBlocks(eaPlanningResponse);
-        const advisorResponses = new Map<string, string>();
-
-        if (dispatchBlocks.length > 0) {
-          // Collect all unique advisor keys to dispatch
-          const dispatchMap = new Map<string, string[]>(); // advisorKey -> questions
-          for (const block of dispatchBlocks) {
-            for (const advisorKey of block.advisors) {
-              const existing = dispatchMap.get(advisorKey) ?? [];
-              existing.push(block.question);
-              dispatchMap.set(advisorKey, existing);
-            }
-          }
-
-          const dispatchedCoaches: CoachConfig[] = [];
-          for (const key of dispatchMap.keys()) {
-            const coach = await getCoachByKey(key, user.id);
-            if (coach) dispatchedCoaches.push(coach);
-          }
-
-          if (dispatchedCoaches.length > 0) {
-            send({
-              type: "ea_dispatch",
-              advisors: dispatchedCoaches.map((c) => ({ key: c.key, name: c.name, icon: c.icon })),
-            });
-
-            for (const coach of dispatchedCoaches) {
-              send({ type: "coach_start", coachKey: coach.key, coachName: coach.name, isLead: false });
-            }
-
-            const advisorPromises = dispatchedCoaches.map(async (coach) => {
-              const questions = dispatchMap.get(coach.key) ?? [];
-              const advisorQuestion = questions.join("\n\n");
-              const behaviors = await getActiveBehaviors(user.id, projectId, coach.key);
-              const behaviorCtx = formatBehaviorDirectives(behaviors);
-              const advisorContext = [...contextParts, behaviorCtx].filter(Boolean).join("\n\n");
-              const advisorMessage = `${advisorContext}\n\n[EA Dispatch — Targeted Question]\n${advisorQuestion}\n\n[Original User Request for Context]\n${message}`;
-
-              let advisorResponse = "";
-              try {
-                const sessionId = await getOrCreateSession(convId!, coach, anthropicKey, user.id);
-                for await (const event of streamCoachResponse(sessionId, advisorMessage, coach.key, anthropicKey)) {
-                  switch (event.type) {
-                    case "text":
-                      advisorResponse += event.content;
-                      send({ type: "text", content: event.content, coachKey: coach.key });
-                      break;
-                    case "tool_use":
-                      send({ type: "tool_use", tool: event.content, coachKey: coach.key });
-                      activityProvider.add(user.id, convId!, coach.key, "tool_use", { tool: event.content, input: event.toolInput }, orgId);
-                      break;
-                    case "tool_result":
-                      send({ type: "tool_result", content: event.content, coachKey: coach.key, toolName: event.toolName });
-                      break;
-                    case "thinking":
-                      send({ type: "thinking", coachKey: coach.key });
-                      break;
-                    case "usage":
-                      send({ type: "usage", coachKey: coach.key, usage: event.usage });
-                      activityProvider.add(user.id, convId!, coach.key, "usage", event.usage as Record<string, unknown>, orgId);
-                      break;
-                    case "error":
-                      send({ type: "error", content: event.content, coachKey: coach.key });
-                      break;
-                  }
-                }
-              } catch (err) {
-                send({ type: "error", content: String(err), coachKey: coach.key });
-              }
-
-              if (advisorResponse) {
-                await addMessage(convId!, "assistant", advisorResponse, coach.key, activeMode);
-                advisorResponses.set(coach.key, advisorResponse);
-                coachResponses.set(coach.key, advisorResponse);
-              }
-              send({ type: "coach_done", coachKey: coach.key });
-            });
-
-            await Promise.all(advisorPromises);
-
-            // Phase 3: EA synthesis with advisor responses
-            if (advisorResponses.size > 0) {
-              send({ type: "ea_synthesis_start", coachKey: "ea" });
-
-              const advisorSummary = dispatchedCoaches
-                .map((c) => {
-                  const resp = advisorResponses.get(c.key);
-                  return resp ? `## ${c.name}\n\n${resp}` : null;
-                })
-                .filter(Boolean)
-                .join("\n\n---\n\n");
-
-              const synthesisQuestion = `The user's request was: "${message}"\n\nYou dispatched advisors and received their responses:\n\n${advisorSummary}\n\nNow synthesize these into a clear, unified response for the user. Highlight agreements, surface tensions and tradeoffs, and give concrete next steps. Reference advisors by name when drawing on their input.`;
-
-              let eaSynthesis = "";
-              try {
-                const sessionId = await getOrCreateSession(convId!, eaCoach, anthropicKey, user.id);
-                for await (const event of streamCoachResponse(sessionId, synthesisQuestion, eaCoach.key, anthropicKey)) {
-                  switch (event.type) {
-                    case "text":
-                      eaSynthesis += event.content;
-                      send({ type: "synthesis_text", content: event.content, streaming: true });
-                      break;
-                    case "usage":
-                      send({ type: "usage", coachKey: "ea", usage: event.usage });
-                      break;
-                    case "error":
-                      send({ type: "error", content: event.content, coachKey: "ea" });
-                      break;
-                  }
-                }
-              } catch (err) {
-                send({ type: "error", content: `EA synthesis failed: ${err}` });
-              }
-
-              if (eaSynthesis) {
-                await addMessage(convId!, "assistant", eaSynthesis, "ea-synthesis", activeMode);
-                coachResponses.set("ea-synthesis", eaSynthesis);
-              }
-              send({ type: "ea_synthesis_done" });
-            }
-          }
-        }
-
-        // Save EA planning response (strip block syntax before persisting)
-        if (eaPlanningResponse) {
-          const cleanResponse = stripEaBlocks(eaPlanningResponse);
-          if (cleanResponse) {
-            await addMessage(convId!, "assistant", eaPlanningResponse, "ea", activeMode);
-            coachResponses.set("ea", eaPlanningResponse);
-          }
+        if (cleanResponse) {
+          await addMessage(convId!, "assistant", cleanResponse, "ea", activeMode);
+          coachResponses.set("ea", cleanResponse);
         }
 
         send({ type: "coach_done", coachKey: "ea" });
