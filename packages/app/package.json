@@ -1,0 +1,33 @@
+{
+  "name": "ai-native-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-native/core": "workspace:*",
+    "@jazzmind/busibox-app": "workspace:*",
+    "next": "^15.0.0",
+    "next-auth": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "ai": "^4.0.0",
+    "@neondatabase/serverless": "^0.10.0",
+    "@vercel/blob": "^0.27.0"
+  }
+}
