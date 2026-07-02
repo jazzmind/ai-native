@@ -16,6 +16,7 @@ export interface ActivityProvider {
     coachKey: string,
     eventType: string,
     eventData?: Record<string, unknown>,
+    orgId?: string,
   ): Promise<void>;
 
   listByConversation(userId: string, conversationId: string): Promise<ActivityEntry[]>;

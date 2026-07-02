@@ -17,6 +17,7 @@ export interface ProfileProvider {
     key: string,
     value: string,
     sourceConversation?: string,
+    orgId?: string,
   ): Promise<void>;
 
   list(userId: string, category?: string): Promise<ProfileEntry[]>;

@@ -63,7 +63,7 @@ export type StreamEvent =
 
 export interface RoutingDecision {
   coaches: CoachMeta[];
-  lead: string;
+  lead?: string;
   mode: AgentMode;
   synthesize: boolean;
   reasoning: string;
