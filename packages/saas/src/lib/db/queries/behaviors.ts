@@ -140,6 +140,51 @@ export async function deleteBehavior(id: string, userId: string): Promise<void> 
     .where(and(eq(agentBehaviors.id, id), eq(agentBehaviors.userId, userId)));
 }
 
+// ── Org-scoped variants for StorageProvider ─────────────────────────────────
+// The shared (core) StorageProvider interface scopes behaviors by orgId, not
+// projectId (the local schema's actual scoping column, NOT NULL). These
+// helpers bridge that gap without changing the project-scoped functions above.
+
+export async function listActiveBehaviorsForOrg(
+  orgId: string,
+  userId: string,
+  coachKey?: string
+): Promise<AgentBehavior[]> {
+  const db = getDb();
+  const conditions = [eq(agentBehaviors.orgId, orgId), eq(agentBehaviors.userId, userId), eq(agentBehaviors.isActive, true)];
+  if (coachKey) conditions.push(eq(agentBehaviors.coachKey, coachKey));
+
+  const rows = await db
+    .select()
+    .from(agentBehaviors)
+    .where(and(...conditions))
+    .orderBy(asc(agentBehaviors.createdAt));
+  return rows.map(toBehavior);
+}
+
+/**
+ * Creates a behavior with no specific project (project_id stored as '').
+ * The core AddBehavior input has no projectId field, unlike createBehavior()
+ * above which requires one.
+ */
+export async function createBehaviorForOrg(
+  orgId: string,
+  userId: string,
+  coachKey: string,
+  directive: string,
+  source = 'manual'
+): Promise<AgentBehavior> {
+  return createBehavior(coachKey, '', userId, directive, source, orgId);
+}
+
+export async function deactivateBehaviorById(id: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(agentBehaviors)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(eq(agentBehaviors.id, id));
+}
+
 export async function createRevision(
   coachKey: string,
   projectId: string,

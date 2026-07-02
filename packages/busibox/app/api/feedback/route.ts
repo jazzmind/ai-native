@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthWithTokenExchange } from "@lib/auth-middleware";
-import { ensureDataDocuments, addFeedback } from "@lib/data-api-client";
+import { getStorageProvider } from "@lib/providers";
 
 function extractUserId(token: string): { userId: string; orgId: string } {
   try {
@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     comment?: string;
   };
 
-  const documentIds = await ensureDataDocuments(auth.apiToken);
+  const storage = getStorageProvider(auth.apiToken);
 
-  await addFeedback(auth.apiToken, documentIds.feedback, {
+  await storage.addMessageFeedback({
     messageId: String(body.messageId),
     conversationId: body.conversationId,
     userId,

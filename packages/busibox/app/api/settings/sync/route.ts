@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthWithTokenExchange } from "@lib/auth-middleware";
 import { ensureDataDocuments } from "@lib/data-api-client";
-import { syncAdvisors, getAdvisorSyncStatus } from "@lib/sync";
+import { getAgentProvider } from "@lib/providers";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuthWithTokenExchange(request, "agent-api");
   if (auth instanceof NextResponse) return auth;
 
-  const status = await getAdvisorSyncStatus(auth.apiToken);
+  const status = await getAgentProvider(auth.apiToken).getAdvisorSyncStatus();
   return NextResponse.json(status);
 }
 
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (dataAuth instanceof NextResponse) return dataAuth;
 
   const documentIds = await ensureDataDocuments(dataAuth.apiToken);
-  const result = await syncAdvisors(agentAuth.apiToken, {
+  const result = await getAgentProvider(agentAuth.apiToken).syncAdvisors({
     conversations: documentIds.conversations,
     messages: documentIds.messages,
     eaMemory: documentIds.eaMemory,

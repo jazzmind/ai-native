@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTokenFromRequest, isTokenExpired } from "@jazzmind/busibox-app/lib/authz";
-import { exchangeForAuthzToken, type AuthzAudience } from "@lib/authz-client";
+import { getTokenFromRequest, isTokenExpired, type AuthzAudience } from "@jazzmind/busibox-app/lib/authz";
+import { exchangeForAuthzToken } from "@lib/providers/auth-provider";
 
 /**
  * POST /api/auth/refresh

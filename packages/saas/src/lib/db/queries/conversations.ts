@@ -85,6 +85,56 @@ export async function getConversation(id: string, userId?: string): Promise<Conv
   return row ? toConversation(row) : undefined;
 }
 
+/**
+ * Looks up a conversation by id, including org_id — needed by
+ * StorageProvider.getConversation(id), whose shared (core) interface returns
+ * an object with orgId, which the local `Conversation` shape above omits to
+ * avoid changing existing JSON response payloads that spread it directly.
+ */
+export async function getConversationById(id: string): Promise<(Conversation & { org_id: string }) | undefined> {
+  const db = getDb();
+  const [row] = await db.select().from(conversations).where(eq(conversations.id, id));
+  return row ? { ...toConversation(row), org_id: row.orgId } : undefined;
+}
+
+/**
+ * Lists conversations scoped to an org (and optionally a project), returning
+ * org_id per row. Added for StorageProvider.listConversations(orgId, userId,
+ * projectId?), where projectId is optional — unlike listConversations() above.
+ */
+export async function listConversationsByOrg(
+  orgId: string,
+  userId: string,
+  projectId?: string
+): Promise<(Conversation & { org_id: string })[]> {
+  const db = getDb();
+  const conditions = [eq(conversations.orgId, orgId), eq(conversations.userId, userId)];
+  if (projectId) conditions.push(eq(conversations.projectId, projectId));
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(and(...conditions))
+    .orderBy(desc(conversations.updatedAt));
+  return rows.map((row) => ({ ...toConversation(row), org_id: row.orgId }));
+}
+
+export async function updateConversationTitle(id: string, title: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(conversations)
+    .set({ title, updatedAt: new Date() })
+    .where(eq(conversations.id, id));
+}
+
+// Deletes a conversation and its messages. Mirrors the scope of the existing
+// deleteProject() cascade above (does not also clean up feedback/activity/
+// attachment rows referencing this conversation's messages).
+export async function deleteConversationById(id: string): Promise<void> {
+  const db = getDb();
+  await db.delete(messages).where(eq(messages.conversationId, id));
+  await db.delete(conversations).where(eq(conversations.id, id));
+}
+
 export async function addMessage(
   conversationId: string,
   role: 'user' | 'assistant' | 'system',

@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthWithTokenExchange } from "@lib/auth-middleware";
-import {
-  ensureDataDocuments,
-  listConversations,
-  listMessages,
-} from "@lib/data-api-client";
+import { getStorageProvider } from "@lib/providers";
 
 function extractUserId(token: string): string {
   try {
@@ -25,13 +21,14 @@ export async function GET(request: NextRequest) {
   const withMessages = searchParams.get("messages") === "1";
   const conversationId = searchParams.get("id");
 
-  const documentIds = await ensureDataDocuments(auth.apiToken);
+  const storage = getStorageProvider(auth.apiToken);
 
   if (conversationId && withMessages) {
-    const messages = await listMessages(auth.apiToken, documentIds.messages, conversationId);
+    const messages = await storage.listMessages(conversationId);
     return NextResponse.json({ messages });
   }
 
-  const conversations = await listConversations(auth.apiToken, documentIds.conversations, userId, projectId);
+  // Busibox has no real org concept — the synthesized org id is the user id.
+  const conversations = await storage.listConversations(userId, userId, projectId);
   return NextResponse.json({ conversations });
 }

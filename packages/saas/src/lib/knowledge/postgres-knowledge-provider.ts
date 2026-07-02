@@ -2,7 +2,7 @@ import { eq, and, asc, sql } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import { getDb } from "@/lib/db/client";
 import { knowledgeCollections, knowledgeDocuments } from "@/lib/db/schema";
-import type { KnowledgeProvider, ProviderContext, SearchResult, Collection, DocumentInput, KnowledgeDocument } from "./knowledge-provider";
+import type { KnowledgeProvider, ProviderContext, SearchResult, Collection, DocumentInput, KnowledgeDocument } from "@ai-native/core";
 
 export class PostgresKnowledgeProvider implements KnowledgeProvider {
   readonly type = "postgres";

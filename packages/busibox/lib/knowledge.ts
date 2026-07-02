@@ -14,13 +14,18 @@ import type {
   DocumentInput,
   KnowledgeDocument,
 } from "@ai-native/core";
+import { BusiboxSearchAdapter } from "@jazzmind/busibox-app/platform/busibox";
 
 const SEARCH_API_URL = process.env.SEARCH_API_URL || "http://localhost:8003";
 
 export class BusiboxKnowledgeProvider implements KnowledgeProvider {
   readonly type = "busibox-search-api";
 
-  constructor(private readonly getToken: () => Promise<string>) {}
+  private readonly searchAdapter: BusiboxSearchAdapter;
+
+  constructor(private readonly getToken: () => Promise<string>) {
+    this.searchAdapter = new BusiboxSearchAdapter({ searchApiUrl: SEARCH_API_URL, getToken });
+  }
 
   private async headers(): Promise<Record<string, string>> {
     const token = await this.getToken();
@@ -35,25 +40,22 @@ export class BusiboxKnowledgeProvider implements KnowledgeProvider {
     query: string,
     options?: { limit?: number; collection?: string },
   ): Promise<SearchResult[]> {
-    const headers = await this.headers();
-    const body: Record<string, unknown> = {
-      query,
-      user_id: ctx.userId,
-      project_id: ctx.projectId,
-      limit: options?.limit ?? 5,
-    };
-    if (options?.collection) body["collection"] = options.collection;
-
-    const res = await fetch(`${SEARCH_API_URL}/search`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as { results?: SearchResult[] };
-    return data.results ?? [];
+    try {
+      const results = await this.searchAdapter.search({
+        query,
+        collections: options?.collection ? [options.collection] : undefined,
+        limit: options?.limit ?? 5,
+      });
+      return results.map((r) => ({
+        id: r.id,
+        content: r.content,
+        source: r.collection,
+        score: r.score,
+        metadata: r.metadata,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   async ingest(ctx: ProviderContext, doc: DocumentInput, collection?: string): Promise<{ id: string }> {

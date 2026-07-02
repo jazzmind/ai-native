@@ -2,6 +2,26 @@ import { eq, and, lte, sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../client';
 import { agentTasks } from '../schema';
+import type { TaskStatus } from '@ai-native/core';
+
+// Local status enum ('pending' | 'triggered' | 'completed' | 'dismissed') vs.
+// core TaskStatus ('pending' | 'processing' | 'completed' | 'failed' | 'cancelled').
+// These two mappings are lossy in one direction (both 'failed' and 'cancelled'
+// collapse to local 'dismissed') since the local schema has no equivalent split.
+const CORE_TO_LOCAL_STATUS: Record<TaskStatus, 'pending' | 'triggered' | 'completed' | 'dismissed'> = {
+  pending: 'pending',
+  processing: 'triggered',
+  completed: 'completed',
+  failed: 'dismissed',
+  cancelled: 'dismissed',
+};
+
+export const LOCAL_TO_CORE_STATUS: Record<'pending' | 'triggered' | 'completed' | 'dismissed', TaskStatus> = {
+  pending: 'pending',
+  triggered: 'processing',
+  completed: 'completed',
+  dismissed: 'cancelled',
+};
 
 export async function createAgentTask(data: {
   orgId: string;
@@ -119,6 +139,44 @@ export async function getAgentTaskById(taskId: string) {
   const db = getDb();
   const [task] = await db.select().from(agentTasks).where(eq(agentTasks.id, taskId));
   return task;
+}
+
+/**
+ * Generic status setter for StorageProvider.updateTaskStatus(id, status, result?),
+ * whose core TaskStatus enum doesn't map 1:1 onto the local schema's status
+ * column (see CORE_TO_LOCAL_STATUS above). `result` — also not a dedicated
+ * column locally — is merged into the existing `context` jsonb blob.
+ */
+export async function updateTaskStatus(id: string, status: TaskStatus, result?: string): Promise<void> {
+  const db = getDb();
+  const updates: Record<string, unknown> = {
+    status: CORE_TO_LOCAL_STATUS[status],
+    updatedAt: new Date(),
+  };
+
+  if (result !== undefined) {
+    const [existing] = await db.select({ context: agentTasks.context }).from(agentTasks).where(eq(agentTasks.id, id));
+    updates.context = { ...((existing?.context as Record<string, unknown> | null) ?? {}), result };
+  }
+
+  await db.update(agentTasks).set(updates).where(eq(agentTasks.id, id));
+}
+
+/**
+ * Lists a user's pending tasks across all projects, optionally only those
+ * due before a given time. Added for StorageProvider.listPendingTasks(userId,
+ * before?) — distinct from getDueTasks() (global, cron-job specific) and
+ * listAgentTasksForUser() (project-scoped, all statuses) above.
+ */
+export async function listPendingTasksForUser(userId: string, before?: Date) {
+  const db = getDb();
+  const conditions = [eq(agentTasks.userId, userId), eq(agentTasks.status, 'pending')];
+  if (before) conditions.push(lte(agentTasks.triggerAt, before));
+  return db
+    .select()
+    .from(agentTasks)
+    .where(and(...conditions))
+    .orderBy(sql`${agentTasks.triggerAt} asc`);
 }
 
 export async function dismissTask(taskId: string, userId: string) {

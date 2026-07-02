@@ -63,6 +63,18 @@ export async function getProject(id: string, userId: string): Promise<Project | 
   return row ? toProject(row) : undefined;
 }
 
+/**
+ * Looks up a project by id only, with no user-ownership filter.
+ * Added for StorageProvider.getProject(id), whose interface (shared with the
+ * Busibox backend) has no userId param — callers are expected to have already
+ * authorized access via other means before calling this.
+ */
+export async function getProjectById(id: string): Promise<Project | undefined> {
+  const db = getDb();
+  const [row] = await db.select().from(projects).where(eq(projects.id, id));
+  return row ? toProject(row) : undefined;
+}
+
 export async function updateProject(
   id: string,
   userId: string,
@@ -88,6 +100,36 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
   await db
     .delete(projects)
     .where(and(eq(projects.id, id), eq(projects.userId, userId)));
+}
+
+/**
+ * Updates a project by id only (no userId ownership filter) — needed for
+ * StorageProvider.updateProject(id, updates), whose shared interface has no
+ * userId param and expects the updated Project back (unlike updateProject()
+ * above, which is void).
+ */
+export async function updateProjectById(
+  id: string,
+  updates: { name?: string; description?: string }
+): Promise<void> {
+  const db = getDb();
+  const setValues: Record<string, any> = { updatedAt: new Date() };
+  if (updates.name !== undefined) setValues.name = updates.name;
+  if (updates.description !== undefined) setValues.description = updates.description;
+  await db.update(projects).set(setValues).where(eq(projects.id, id));
+}
+
+/**
+ * Deletes a project by id only (no userId ownership filter) — needed for
+ * StorageProvider.deleteProject(id), whose shared interface has no userId
+ * param. Mirrors the cascade scope of deleteProject() above.
+ */
+export async function deleteProjectById(id: string): Promise<void> {
+  const db = getDb();
+  await db.delete(conversations).where(eq(conversations.projectId, id));
+  await db.delete(knowledgeShares).where(eq(knowledgeShares.sourceProjectId, id));
+  await db.delete(knowledgeShares).where(eq(knowledgeShares.targetProjectId, id));
+  await db.delete(projects).where(eq(projects.id, id));
 }
 
 export async function getOrCreateDefaultProject(userId: string, orgId: string): Promise<Project> {

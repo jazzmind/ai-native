@@ -291,6 +291,24 @@ export async function getOrCreateDefaultProject(
   });
 }
 
+export async function updateProject(
+  token: string,
+  documentId: string,
+  id: string,
+  updates: Partial<Pick<Project, "name" | "description">>,
+): Promise<Project> {
+  await updateRecords(token, documentId, { ...updates, updatedAt: getNow() }, { field: "id", op: "eq", value: id });
+  const updated = await getProject(token, documentId, id);
+  if (!updated) {
+    throw new Error(`Project ${id} not found after update`);
+  }
+  return updated;
+}
+
+export async function deleteProject(token: string, documentId: string, id: string): Promise<void> {
+  await deleteRecords(token, documentId, { field: "id", op: "eq", value: id });
+}
+
 // ── Conversations ──────────────────────────────────────────
 
 export async function createConversation(
@@ -349,6 +367,10 @@ export async function updateConversationTitle(
   title: string,
 ): Promise<void> {
   await updateRecords(token, documentId, { title, updatedAt: getNow() }, { field: "id", op: "eq", value: id });
+}
+
+export async function deleteConversation(token: string, documentId: string, id: string): Promise<void> {
+  await deleteRecords(token, documentId, { field: "id", op: "eq", value: id });
 }
 
 // ── Messages ───────────────────────────────────────────────

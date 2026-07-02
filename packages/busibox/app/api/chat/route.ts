@@ -17,20 +17,19 @@ import {
   parseTaskBlocks,
   stripEaBlocks,
   getCoachMeta,
+  formatEaMemoryForPrompt,
 } from "@ai-native/core";
+import type { AgentMode, AgentSessionContext } from "@ai-native/core";
+import { ensureDataDocuments } from "@lib/data-api-client";
 import {
-  ensureDataDocuments,
-  createConversation,
-  createMessage,
-  createTask,
-  upsertEaMemory,
-  listActiveBehaviors,
-  listEaMemory,
-} from "@lib/data-api-client";
-import { routeMessage } from "@lib/router";
-import { syncAdvisorsOnce } from "@lib/sync";
-import { formatEaMemoryForPrompt } from "@ai-native/core";
-import { BusiboxKnowledgeProvider, searchKnowledgeForContext } from "@lib/knowledge";
+  getStorageProvider,
+  getAgentProvider,
+  getKnowledgeProvider,
+  type BusiboxStorageProvider,
+  type BusiboxAgentProvider,
+  type BusiboxKnowledgeProvider,
+} from "@lib/providers";
+import { searchKnowledgeForContext } from "@lib/knowledge";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -65,9 +64,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Message is required" }, { status: 400 });
   }
 
+  const storage = getStorageProvider(dataAuth.apiToken);
+  const agentProvider = getAgentProvider(auth.apiToken);
+  const knowledgeProvider = getKnowledgeProvider(async () => dataAuth.apiToken);
+
   // Ensure documents and sync advisors
   const documentIds = await ensureDataDocuments(dataAuth.apiToken);
-  await syncAdvisorsOnce(auth.apiToken, {
+  await agentProvider.syncAdvisorsOnce({
     conversations: documentIds.conversations,
     messages: documentIds.messages,
     eaMemory: documentIds.eaMemory,
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest) {
   // Get or create conversation
   let conversationId = body.conversationId;
   if (!conversationId) {
-    const conv = await createConversation(dataAuth.apiToken, documentIds.conversations, {
+    const conv = await storage.createConversation({
       orgId,
       userId,
       projectId,
@@ -90,17 +93,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Persist user message
-  const userMsg = await createMessage(dataAuth.apiToken, documentIds.messages, {
+  await storage.createMessage({
     conversationId,
     role: "user",
     content: message,
   });
 
   // Route to advisors
-  const routing = await routeMessage(auth.apiToken, {
+  const routing = await agentProvider.routeMessage({
     message,
     explicitCoachKeys: coachKeys?.length ? coachKeys : undefined,
-    explicitMode: requestedMode as "advise" | "coach" | "plan" | "assist" | "execute" | undefined,
+    explicitMode: requestedMode as AgentMode | undefined,
     projectContext: projectId,
   });
 
@@ -118,18 +121,15 @@ export async function POST(request: NextRequest) {
         });
         send(controller, { type: "conversation_id", conversationId });
 
-        const agentApiUrl = process.env.AGENT_API_URL || "http://localhost:8000";
-
         // Collect responses per coach for synthesis
         const coachResponses: Record<string, string> = {};
 
         // If EA orchestration — run EA first, may dispatch
         if (routing.coaches.length === 1 && routing.coaches[0]?.key === "ea") {
           await streamAdvisorResponse(
-            agentApiUrl,
-            auth.apiToken,
-            dataAuth.apiToken,
-            documentIds,
+            agentProvider,
+            storage,
+            knowledgeProvider,
             conversationId,
             "ea",
             message,
@@ -147,10 +147,9 @@ export async function POST(request: NextRequest) {
           await Promise.all(
             routing.coaches.map((coach) =>
               streamAdvisorResponse(
-                agentApiUrl,
-                auth.apiToken,
-                dataAuth.apiToken,
-                documentIds,
+                agentProvider,
+                storage,
+                knowledgeProvider,
                 conversationId!,
                 coach.key,
                 message,
@@ -169,9 +168,8 @@ export async function POST(request: NextRequest) {
           // Synthesize if multiple advisors
           if (routing.synthesize && Object.keys(coachResponses).length > 1) {
             await streamSynthesis(
-              agentApiUrl,
-              auth.apiToken,
-              routing.lead,
+              agentProvider,
+              routing.lead ?? routing.coaches[0]?.key ?? "strategy",
               message,
               routing.mode,
               coachResponses,
@@ -258,10 +256,9 @@ function extractUserInfo(token: string): { userId: string; orgId: string } {
 }
 
 async function streamAdvisorResponse(
-  agentApiUrl: string,
-  agentToken: string,
-  dataToken: string,
-  documentIds: Awaited<ReturnType<typeof ensureDataDocuments>>,
+  agentProvider: BusiboxAgentProvider,
+  storage: BusiboxStorageProvider,
+  knowledgeProvider: BusiboxKnowledgeProvider,
   conversationId: string,
   coachKey: string,
   message: string,
@@ -280,14 +277,14 @@ async function streamAdvisorResponse(
   sendFn(controller, { type: "coach_start", coachKey });
 
   // Build context for this advisor
-  const behaviors = await listActiveBehaviors(dataToken, documentIds.behaviors, orgId, userId, coachKey);
+  const behaviors = await storage.listActiveBehaviors(orgId, userId, coachKey);
   const behaviorText = behaviors.length > 0
     ? "\n\n## Active Behavioral Directives\n" + behaviors.map((b) => `- ${b.directive}`).join("\n")
     : "";
 
   let eaMemoryText = "";
   if (isEa) {
-    const memEntries = await listEaMemory(dataToken, documentIds.eaMemory, userId, projectId);
+    const memEntries = await storage.listEaMemory(userId, projectId);
     eaMemoryText = memEntries.length > 0
       ? "\n\n## EA Memory\n" + formatEaMemoryForPrompt(memEntries)
       : "";
@@ -296,8 +293,6 @@ async function streamAdvisorResponse(
   // Enrich context with knowledge search
   let knowledgeText = "";
   try {
-    const searchApiToken = dataToken; // search-api uses same token exchange
-    const knowledgeProvider = new BusiboxKnowledgeProvider(async () => searchApiToken);
     knowledgeText = await searchKnowledgeForContext(
       knowledgeProvider,
       { userId, projectId },
@@ -309,56 +304,35 @@ async function streamAdvisorResponse(
 
   const systemContext = behaviorText + eaMemoryText + knowledgeText;
 
-  // Stream via agent-api sessions endpoint
-  const res = await fetch(`${agentApiUrl}/sessions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${agentToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      agent_name: coachKey,
-      conversation_id: `${conversationId}:${coachKey}`,
-      message,
-      system_context: systemContext,
-      stream: true,
-    }),
-  });
-
-  if (!res.ok || !res.body) {
-    sendFn(controller, {
-      type: "error",
-      coachKey,
-      message: `Agent ${coachKey} unavailable: ${res.status}`,
-    });
-    return;
-  }
+  const ctx: AgentSessionContext = { conversationId, coachKey, orgId, userId, projectId };
 
   let fullText = "";
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const event = JSON.parse(line.slice(6)) as { type: string; text?: string; tool?: string; input?: unknown };
-        if (event.type === "text" && event.text) {
-          fullText += event.text;
-          sendFn(controller, { type: "text", coachKey, text: event.text });
-        } else if (event.type === "tool_use") {
-          sendFn(controller, { type: "tool_use", coachKey, toolName: event.tool, toolInput: event.input });
-        }
-      } catch {
-        // skip malformed SSE lines
-      }
+  let hadError = false;
+  for await (const event of agentProvider.streamResponse(ctx, message, systemContext)) {
+    switch (event.type) {
+      case "text":
+        fullText += event.text;
+        sendFn(controller, { type: "text", coachKey, text: event.text });
+        break;
+      case "tool_use":
+        sendFn(controller, { type: "tool_use", coachKey, toolName: event.toolName, toolInput: event.toolInput });
+        break;
+      case "error":
+        sendFn(controller, { type: "error", coachKey, message: event.message });
+        hadError = true;
+        break;
+      case "done":
+        fullText = event.fullText || fullText;
+        break;
+      default:
+        break;
     }
+  }
+
+  if (hadError) {
+    // Mirrors the previous behavior of returning immediately when the
+    // agent-api request failed, without emitting coach_done.
+    return;
   }
 
   coachResponses[coachKey] = fullText;
@@ -383,10 +357,9 @@ async function streamAdvisorResponse(
         // Second-pass: same advisor applies the skill
         const skillResponses: Record<string, string> = {};
         await streamAdvisorResponse(
-          agentApiUrl,
-          agentToken,
-          dataToken,
-          documentIds,
+          agentProvider,
+          storage,
+          knowledgeProvider,
           conversationId,
           coachKey,
           skillPrompt,
@@ -417,7 +390,7 @@ async function streamAdvisorResponse(
 
     // Process memory writes
     for (const mem of memories) {
-      await upsertEaMemory(dataToken, documentIds.eaMemory, {
+      await storage.upsertEaMemory({
         orgId,
         userId,
         projectId,
@@ -430,7 +403,7 @@ async function streamAdvisorResponse(
 
     // Process task creation
     for (const task of tasks) {
-      await createTask(dataToken, documentIds.tasks, {
+      await storage.createAgentTask({
         orgId,
         userId,
         projectId,
@@ -450,10 +423,9 @@ async function streamAdvisorResponse(
         for (const advisorKey of dispatch.advisors) {
           if (getCoachMeta(advisorKey)) {
             await streamAdvisorResponse(
-              agentApiUrl,
-              agentToken,
-              dataToken,
-              documentIds,
+              agentProvider,
+              storage,
+              knowledgeProvider,
               conversationId,
               advisorKey,
               dispatch.question,
@@ -474,7 +446,7 @@ async function streamAdvisorResponse(
     // Store cleaned EA message
     const cleanedText = stripEaBlocks(fullText);
     if (cleanedText) {
-      await createMessage(dataToken, documentIds.messages, {
+      await storage.createMessage({
         conversationId,
         role: "assistant",
         content: cleanedText,
@@ -483,7 +455,7 @@ async function streamAdvisorResponse(
     }
   } else if (fullText) {
     // Store non-EA advisor message
-    await createMessage(dataToken, documentIds.messages, {
+    await storage.createMessage({
       conversationId,
       role: "assistant",
       content: fullText,
@@ -495,8 +467,7 @@ async function streamAdvisorResponse(
 }
 
 async function streamSynthesis(
-  agentApiUrl: string,
-  agentToken: string,
+  agentProvider: BusiboxAgentProvider,
   leadKey: string,
   userMessage: string,
   mode: string,
@@ -506,76 +477,23 @@ async function streamSynthesis(
 ): Promise<void> {
   sendFn(controller, { type: "synthesis_start", leadKey });
 
-  const responseContext = Object.entries(coachResponses)
-    .map(([key, text]) => {
-      const coach = getCoachMeta(key);
-      return `## ${coach?.name ?? key}\n${text}`;
-    })
-    .join("\n\n---\n\n");
+  const responses = Object.entries(coachResponses).map(([key, text]) => ({
+    coachKey: key,
+    coachName: getCoachMeta(key)?.name ?? key,
+    response: text,
+  }));
 
-  const synthesisPrompt = `You have received responses from ${Object.keys(coachResponses).length} advisors to this question: "${userMessage}"
-
-${responseContext}
-
-Synthesize these responses into a unified answer that:
-1. Highlights where advisors agree (with high confidence)
-2. Surfaces tensions or disagreements (and explains them)
-3. Gives the user a clear, actionable path forward
-4. Cites advisors by name when drawing on their specific expertise
-5. Uses the ${mode} mode: ${getSynthesisModeInstruction(mode)}`;
-
-  const res = await fetch(`${agentApiUrl}/sessions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${agentToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      agent_name: leadKey,
-      conversation_id: `synthesis-${Date.now()}`,
-      message: synthesisPrompt,
-      stream: true,
-    }),
-  });
-
-  if (!res.ok || !res.body) {
-    sendFn(controller, { type: "synthesis_error", message: `Synthesis unavailable: ${res.status}` });
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const event = JSON.parse(line.slice(6)) as { type: string; text?: string };
-        if (event.type === "text" && event.text) {
-          sendFn(controller, { type: "synthesis_text", text: event.text });
-        }
-      } catch {
-        // skip
-      }
+  let errored = false;
+  for await (const event of agentProvider.synthesize(responses, userMessage, mode as AgentMode)) {
+    if (event.type === "text") {
+      sendFn(controller, { type: "synthesis_text", text: event.text });
+    } else if (event.type === "error") {
+      sendFn(controller, { type: "synthesis_error", message: event.message });
+      errored = true;
     }
   }
 
-  sendFn(controller, { type: "synthesis_done" });
-}
-
-function getSynthesisModeInstruction(mode: string): string {
-  const instructions: Record<string, string> = {
-    advise: "give concrete recommendations and analysis",
-    coach: "help the user build capability and understanding",
-    plan: "produce structured action items with owners and timelines",
-    assist: "prepare the materials, the user will decide",
-    execute: "make the decision and describe the actions to take",
-  };
-  return instructions[mode] ?? instructions["advise"]!;
+  if (!errored) {
+    sendFn(controller, { type: "synthesis_done" });
+  }
 }

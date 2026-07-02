@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuthWithTokenExchange } from "@lib/auth-middleware";
 import { ensureDataDocuments } from "@lib/data-api-client";
-import { syncAdvisorsOnce } from "@lib/sync";
+import { getAgentProvider } from "@lib/providers";
 
 export async function GET(request: NextRequest) {
   return handleSetup(request);
@@ -26,7 +26,7 @@ async function handleSetup(request: NextRequest) {
   try {
     const documentIds = await ensureDataDocuments(dataAuth.apiToken);
 
-    await syncAdvisorsOnce(agentAuth.apiToken, {
+    await getAgentProvider(agentAuth.apiToken).syncAdvisorsOnce({
       conversations: documentIds.conversations,
       messages: documentIds.messages,
       eaMemory: documentIds.eaMemory,

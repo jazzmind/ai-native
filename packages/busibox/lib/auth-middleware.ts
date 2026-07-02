@@ -6,14 +6,25 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getTokenFromRequest } from "@jazzmind/busibox-app/lib/authz";
+import { getTokenFromRequest, type AuthzAudience } from "@jazzmind/busibox-app/lib/authz";
 import { decodeJwt } from "jose";
-import { getApiToken } from "./authz-client";
+import { exchangeForAuthzToken } from "./providers/auth-provider";
 
 const DEFAULT_AUDIENCE = (process.env.DEFAULT_API_AUDIENCE || "backend-api") as
   | "agent-api"
   | "data-api"
   | "search-api";
+
+/** Thin wrapper preserving the old authz-client.ts call shape used below. */
+async function getApiToken(
+  sessionJwt: string,
+  audience: AuthzAudience,
+  scopes?: string[],
+  resourceId?: string | null,
+): Promise<string> {
+  const result = await exchangeForAuthzToken(sessionJwt, audience, scopes, resourceId);
+  return result.accessToken;
+}
 
 export interface AuthenticatedRequest {
   ssoToken: string | null;

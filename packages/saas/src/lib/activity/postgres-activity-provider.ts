@@ -1,7 +1,7 @@
 import { eq, and, asc } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { agentActivity } from "@/lib/db/schema";
-import type { ActivityProvider, ActivityEntry } from "./activity-provider";
+import type { ActivityProvider, ActivityEntry } from "@ai-native/core";
 
 export class PostgresActivityProvider implements ActivityProvider {
   readonly type = "postgres";

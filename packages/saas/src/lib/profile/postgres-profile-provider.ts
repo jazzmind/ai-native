@@ -1,7 +1,7 @@
 import { eq, and, asc } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { userProfileEntries } from "@/lib/db/schema";
-import type { ProfileProvider, ProfileEntry } from "./profile-provider";
+import type { ProfileProvider, ProfileEntry } from "@ai-native/core";
 
 export class PostgresProfileProvider implements ProfileProvider {
   readonly type = "postgres";
